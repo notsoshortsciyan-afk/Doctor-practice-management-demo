@@ -1,0 +1,36 @@
+{
+  "name": "ashrafs-dental-care",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n client,server -c cyan,magenta \"npm:dev:client\" \"npm:dev:server\"",
+    "dev:client": "vite",
+    "dev:server": "npm --prefix server run dev",
+    "build": "tsc -b && vite build",
+    "vercel-build": "prisma generate --schema server/prisma/schema.prisma && prisma migrate deploy --schema server/prisma/schema.prisma && tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "db:migrate": "npm --prefix server run migrate",
+    "db:seed": "npm --prefix server run seed",
+    "db:reset-empty": "npm --prefix server run reset-empty",
+    "db:clear-blood": "npm --prefix server run clear-blood",
+    "db:studio": "npm --prefix server run studio"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "concurrently": "^10.0.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

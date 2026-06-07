@@ -1,0 +1,217 @@
+// Ashraf's Dental Care — data model
+// Postgres in dev and prod (Neon). See server/.env for DATABASE_URL.
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; "rhel-openssl-3.0.x" matches the Vercel/AWS Lambda runtime.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DOCTOR
+  RECEPTIONIST
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+}
+
+// Stored without the dash; serialized to the UI as "Follow-up".
+enum PatientStatus {
+  Active
+  FollowUp
+  Inactive
+  Pending
+}
+
+enum RiskLevel {
+  LOW
+  MED
+  HIGH
+}
+
+enum AppointmentStatus {
+  Confirmed
+  Pending
+  Cancelled
+}
+
+enum InvoiceStatus {
+  Paid
+  Partial
+  Unpaid
+  Overdue
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(RECEPTIONIST)
+  initials     String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  appointments  Appointment[]
+  prescriptions Prescription[]
+  clinicalNotes ClinicalNote[]
+  settings      UserSettings?
+}
+
+model UserSettings {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme         String  @default("light") // light | dark
+  density       String  @default("regular") // compact | regular | comfy
+  fontPair      String  @default("default") // default | jakarta | inter
+  showSideCards Boolean @default(true)
+}
+
+model Patient {
+  id          String        @id @default(cuid())
+  code        String        @unique // human-facing "DC-#####"
+  name        String
+  phone       String
+  email       String?
+  age         Int
+  gender      Gender
+  blood       String?
+  status      PatientStatus @default(Active)
+  risk        RiskLevel     @default(LOW)
+  conditions  String        @default("None reported")
+  allergies   String        @default("None")
+  medications String        @default("None")
+  address     String?
+  avatarHue   Int           @default(200)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  appointments  Appointment[]
+  prescriptions Prescription[]
+  clinicalNotes ClinicalNote[]
+  procedures    Procedure[]
+  invoices      Invoice[]
+  documents     Document[]
+}
+
+model Appointment {
+  id         String            @id @default(cuid())
+  patientId  String
+  patient    Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  providerId String?
+  provider   User?             @relation(fields: [providerId], references: [id])
+  dateTime   DateTime
+  procedure  String
+  status     AppointmentStatus @default(Pending)
+  notes      String?
+  createdAt  DateTime          @default(now())
+
+  @@index([dateTime])
+  @@index([patientId])
+}
+
+model Prescription {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  providerId  String?
+  provider    User?    @relation(fields: [providerId], references: [id])
+  date        DateTime @default(now())
+  complaint   String   @default("")
+  observation String   @default("")
+  diagnosis   String   @default("")
+  treatment   String   @default("")
+  advice      String   @default("")
+  teeth       Json     @default("{}") // ToothSelection: { [toothNumber]: condition }
+  tests       Json     @default("[]") // string[]
+  createdAt   DateTime @default(now())
+
+  medicines PrescriptionMedicine[]
+
+  @@index([patientId])
+  @@index([date])
+}
+
+model PrescriptionMedicine {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  name           String
+  dose           String
+  days           String
+}
+
+model ClinicalNote {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id])
+  title     String
+  date      DateTime @default(now())
+  body      String
+  verified  Boolean  @default(false)
+  italic    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model Procedure {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  date        DateTime
+  outcome     String   @default("Successful")
+  icon        String   @default("tooth") // mask | scope | brush | tooth
+  createdAt   DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model Invoice {
+  id        String        @id @default(cuid())
+  patientId String
+  patient   Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  number    String        @unique
+  date      DateTime      @default(now())
+  status    InvoiceStatus @default(Unpaid)
+  lineItems Json          @default("[]") // { description, amount }[]
+  total     Float
+  createdAt DateTime      @default(now())
+
+  payments Payment[]
+
+  @@index([patientId])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Float
+  method    String   @default("Cash")
+  date      DateTime @default(now())
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type       String   @default("xray") // xray | photo
+  label      String
+  uploadedAt DateTime @default(now())
+
+  @@index([patientId])
+}

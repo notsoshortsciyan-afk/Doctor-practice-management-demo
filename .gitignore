@@ -1,0 +1,14 @@
+node_modules
+dist
+.DS_Store
+*.log
+.vite
+.vscode
+.vercel
+.claude/settings.local.json
+_design_source
+
+# Never commit secrets (server/.gitignore also covers server/.env)
+.env
+.env.*
+!.env.example
