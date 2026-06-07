@@ -33,7 +33,7 @@ There is **no test runner, linter, or formatter** configured. The correctness ga
 
 ## Deployment (Vercel)
 
-This is an **npm workspace** (root + `server/`): a single root `npm install` installs and hoists the server's deps so Vercel can trace them when bundling the serverless function at [api/index.ts](api/index.ts). Vercel runs the `vercel-build` script (set as `buildCommand` in [vercel.json](vercel.json)):
+This is an **npm workspace** (root + `server/`): a single root `npm install` installs and hoists the server's deps so Vercel can trace them when bundling the serverless function at [api/index.ts](api/index.ts). The `buildCommand` in [vercel.json](vercel.json) runs the chain explicitly (NOT via an `npm run` script — a script named `vercel-build` gets misrouted to the `server` workspace under npm workspaces; the same chain is mirrored in the root `build:vercel` script for manual runs):
 
 ```
 prisma generate --schema server/prisma/schema.prisma   # regenerate client (incl. rhel-openssl-3.0.x engine for Lambda)
