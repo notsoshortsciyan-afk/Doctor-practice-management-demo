@@ -214,12 +214,6 @@ function Shell() {
         © {new Date().getFullYear()} Ashraf's Dental Care · Practice Management v{pkg.version}
       </footer>
 
-      {isDoctor && (
-        <div className="fab" onClick={() => go("entry")} title="New entry">
-          <IconPlus size={20} />
-        </div>
-      )}
-
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
