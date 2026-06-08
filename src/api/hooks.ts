@@ -1,7 +1,9 @@
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { apiFetch, type ParamMap } from "./client";
 import type {
@@ -21,6 +23,34 @@ export function useStats() {
   return useQuery({ queryKey: ["stats"], queryFn: () => apiFetch<ApiStats>("/stats") });
 }
 
+// ---------- Prefetch ----------
+// Warm a route's primary query (on login / nav hover) so the screen has data ready
+// the moment it mounts. Query keys + params must match the screens' useQuery calls
+// exactly, or the prefetch lands in a different cache slot and does nothing.
+export function prefetchRoute(qc: QueryClient, route: string, today: string) {
+  const pf = (queryKey: unknown[], path: string, params?: ParamMap) =>
+    qc.prefetchQuery({ queryKey, queryFn: () => apiFetch(path, params ? { params } : undefined) });
+  switch (route) {
+    case "dashboard":
+    case "schedule":
+      pf(["stats"], "/stats");
+      pf(["appointments", { date: today }], "/appointments", { date: today });
+      break;
+    case "directory": {
+      const params = { q: "", status: "", sort: "recent", page: 1, pageSize: 8 };
+      pf(["patients", params], "/patients", params as ParamMap);
+      break;
+    }
+    case "records":
+      pf(["prescriptions", { q: "", limit: 100 }], "/prescriptions", { q: "", limit: 100 });
+      break;
+    case "billing":
+      pf(["stats"], "/stats");
+      pf(["invoices", { status: "" }], "/billing/invoices", { status: "" });
+      break;
+  }
+}
+
 // ---------- Patients ----------
 export interface PatientQuery {
   q?: string;
@@ -34,6 +64,8 @@ export function usePatients(params: PatientQuery) {
   return useQuery({
     queryKey: ["patients", params],
     queryFn: () => apiFetch<PatientListResponse>("/patients", { params: params as ParamMap }),
+    // Keep the prior page/search result on screen while the next one loads.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -96,6 +128,8 @@ export function useAppointments(params: AppointmentQuery, options?: LiveQueryOpt
   return useQuery({
     queryKey: ["appointments", params],
     queryFn: () => apiFetch<ApiAppointment[]>("/appointments", { params: params as ParamMap }),
+    // Changing day/status keeps the previous list visible instead of blanking.
+    placeholderData: keepPreviousData,
     ...options,
   });
 }
@@ -176,6 +210,7 @@ export function usePrescriptions(params: { q?: string; patientId?: string; limit
   return useQuery({
     queryKey: ["prescriptions", params],
     queryFn: () => apiFetch<ApiPrescription[]>("/prescriptions", { params }),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -247,6 +282,7 @@ export function useInvoices(params: { patientId?: string; status?: string }) {
   return useQuery({
     queryKey: ["invoices", params],
     queryFn: () => apiFetch<ApiInvoice[]>("/billing/invoices", { params }),
+    placeholderData: keepPreviousData,
   });
 }
 

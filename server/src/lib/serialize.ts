@@ -39,7 +39,9 @@ export const patientListInclude = {
   // Most recent prescription date powers "Last Visit" now that appointments are
   // no longer patient-linked (they live in the shared website table).
   prescriptions: { select: { date: true }, orderBy: { date: "desc" }, take: 1 },
-  invoices: { include: { payments: true } },
+  // Only the balance string needs invoices — pull just total + payment amounts,
+  // not full payment rows, so list cards stay cheap.
+  invoices: { select: { total: true, payments: { select: { amount: true } } } },
 } satisfies Prisma.PatientInclude;
 
 export type PatientForList = Prisma.PatientGetPayload<{ include: typeof patientListInclude }>;

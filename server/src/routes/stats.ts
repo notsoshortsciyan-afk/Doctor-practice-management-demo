@@ -18,7 +18,7 @@ router.get(
     const twoWeeksAgo = new Date(now);
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-    const [totalPatients, todaysAppts, pendingToday, paymentsThisWeek, paymentsPrevWeek, invoices] =
+    const [totalPatients, todaysAppts, pendingToday, paymentsThisWeek, paymentsPrevWeek, outstandingRows] =
       await Promise.all([
         prisma.patient.count(),
         prisma.appointment.count({
@@ -32,7 +32,13 @@ router.get(
           _sum: { amount: true },
           where: { date: { gte: twoWeeksAgo, lt: weekAgo } },
         }),
-        prisma.invoice.findMany({ include: { payments: true } }),
+        // Outstanding = Σ max(invoice.total − paid, 0), computed in SQL so we don't pull every
+        // invoice + payment into memory. GREATEST(...,0) preserves the per-invoice floor.
+        prisma.$queryRaw<{ outstanding: number }[]>`
+          SELECT COALESCE(SUM(GREATEST(i.total - COALESCE(p.paid, 0), 0)), 0)::float8 AS outstanding
+          FROM "Invoice" i
+          LEFT JOIN (SELECT "invoiceId", SUM(amount) AS paid FROM "Payment" GROUP BY "invoiceId") p
+            ON p."invoiceId" = i.id`,
       ]);
 
     const weeklyRevenue = paymentsThisWeek._sum.amount ?? 0;
@@ -40,10 +46,7 @@ router.get(
     const revenueDelta =
       prevWeekRevenue > 0 ? ((weeklyRevenue - prevWeekRevenue) / prevWeekRevenue) * 100 : null;
 
-    const outstanding = invoices.reduce((sum, inv) => {
-      const paid = inv.payments.reduce((s, p) => s + p.amount, 0);
-      return sum + Math.max(0, inv.total - paid);
-    }, 0);
+    const outstanding = outstandingRows[0]?.outstanding ?? 0;
 
     const utilization = Math.min(100, Math.round((todaysAppts / DAILY_CAPACITY) * 100));
 

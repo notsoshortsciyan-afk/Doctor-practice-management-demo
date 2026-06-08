@@ -16,6 +16,7 @@ import {
   useSlotAvailability,
 } from "../api/hooks";
 import { Modal } from "../components/Modal";
+import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { APPOINTMENT_SLOTS } from "../data";
 import type { ApiAppointment, AppointmentSource, AppointmentStatus } from "../api/types";
 
@@ -240,6 +241,30 @@ function ApptCard({
   );
 }
 
+// Matches ApptCard's grid so the loading state holds the same shape.
+function ApptCardSkeleton() {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "96px 1fr auto auto",
+        gap: 16,
+        alignItems: "center",
+        padding: "16px 20px",
+        borderTop: "1px solid var(--border-soft)",
+      }}
+    >
+      <SkeletonText w={64} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <SkeletonText w={150} />
+        <SkeletonText w={240} />
+      </div>
+      <Skeleton w={72} h={22} radius={999} />
+      <Skeleton w={20} h={20} radius={6} />
+    </div>
+  );
+}
+
 export function Schedule({ showToast }: { showToast: (m: string) => void }) {
   const [date, setDate] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [status, setStatus] = useState("");
@@ -292,7 +317,12 @@ export function Schedule({ showToast }: { showToast: (m: string) => void }) {
 
       <div className="card" style={{ marginTop: 16, overflow: "hidden" }}>
         {isLoading ? (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--ink-500)" }}>Loading…</div>
+          <>
+            <ApptCardSkeleton />
+            <ApptCardSkeleton />
+            <ApptCardSkeleton />
+            <ApptCardSkeleton />
+          </>
         ) : list.length === 0 ? (
           <div style={{ padding: 56, textAlign: "center", color: "var(--ink-500)" }}>
             <IconCalendar size={48} style={{ color: "var(--ink-300)", margin: "0 auto" }} />

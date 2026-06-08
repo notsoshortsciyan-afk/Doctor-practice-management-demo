@@ -8,6 +8,7 @@ import {
   IconSearch,
 } from "../icons";
 import { usePatients } from "../api/hooks";
+import { TableRowsSkeleton } from "../components/Skeleton";
 import type { ApiPatient } from "../api/types";
 
 const PAGE_SIZE = 8;
@@ -198,7 +199,7 @@ export function Directory({ openPatient, initialQuery }: DirectoryProps) {
           <div className="col" style={{ textAlign: "right" }}>Actions</div>
         </div>
         {isLoading ? (
-          <EmptyState title="Loading patients…" sub="Fetching from the database." />
+          <TableRowsSkeleton rows={PAGE_SIZE} cols={6} gridTemplateColumns="2.2fr 1fr 1.2fr 1.7fr 1fr 1fr" />
         ) : isError ? (
           <EmptyState title="Couldn't load patients" sub="Is the API server running?" />
         ) : items.length === 0 ? (

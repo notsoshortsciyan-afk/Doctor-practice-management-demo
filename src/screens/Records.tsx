@@ -2,6 +2,7 @@ import { useState } from "react";
 import { IconFile, IconSearch } from "../icons";
 import { usePrescriptions } from "../api/hooks";
 import { RecordModal } from "../components/RecordModal";
+import { TableRowsSkeleton } from "../components/Skeleton";
 import type { ApiPrescription } from "../api/types";
 
 export function Records({ openPatient }: { openPatient: (id: string) => void }) {
@@ -33,7 +34,7 @@ export function Records({ openPatient }: { openPatient: (id: string) => void }) 
           <div className="col" style={{ textAlign: "right" }}>Actions</div>
         </div>
         {isLoading ? (
-          <div style={{ padding: 48, textAlign: "center", color: "var(--ink-500)", background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderTop: 0, borderRadius: "0 0 10px 10px" }}>Loading…</div>
+          <TableRowsSkeleton rows={6} cols={5} gridTemplateColumns="1.2fr 2fr 2.4fr 1fr 1fr" />
         ) : list.length === 0 ? (
           <div style={{ padding: 56, textAlign: "center", color: "var(--ink-500)", background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderTop: 0, borderRadius: "0 0 10px 10px" }}>
             <IconFile size={44} style={{ color: "var(--ink-300)", margin: "0 auto" }} />

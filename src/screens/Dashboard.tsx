@@ -14,6 +14,7 @@ import {
 } from "../icons";
 import { useAppointments, useStats, useUpdateAppointment } from "../api/hooks";
 import { KebabMenu } from "../components/KebabMenu";
+import { AppointmentRowSkeleton, StatCardSkeleton } from "../components/Skeleton";
 import { useAuth } from "../auth/AuthContext";
 import { money } from "../lib/money";
 import type { ApiAppointment, AppointmentStatus } from "../api/types";
@@ -111,10 +112,21 @@ export function Dashboard({ go, isDoctor }: DashboardProps) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24 }}>
-        <StatCard icon={<IconUsers size={22} />} label="Total Patients" value={stats.data ? stats.data.totalPatients.toLocaleString() : "—"} sub="Registered in the practice" />
-        <StatCard icon={<IconCalendar size={22} />} label="Today's Bookings" value={active.length} sub={`${stats.data?.pendingToday ?? 0} pending`} />
-        <StatCard icon={<IconCash size={22} />} label="Weekly Revenue" value={stats.data ? money(stats.data.weeklyRevenue) : "—"} delta={revenueDelta} sub={revenueDelta ? "vs. last week" : "This week"} />
-        <StatCard icon={<IconBeaker size={22} />} label="Outstanding Balance" value={stats.data ? money(stats.data.outstanding) : "—"} sub="Unpaid & partial invoices" />
+        {stats.isPending ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <StatCard icon={<IconUsers size={22} />} label="Total Patients" value={stats.data ? stats.data.totalPatients.toLocaleString() : "—"} sub="Registered in the practice" />
+            <StatCard icon={<IconCalendar size={22} />} label="Today's Bookings" value={active.length} sub={`${stats.data?.pendingToday ?? 0} pending`} />
+            <StatCard icon={<IconCash size={22} />} label="Weekly Revenue" value={stats.data ? money(stats.data.weeklyRevenue) : "—"} delta={revenueDelta} sub={revenueDelta ? "vs. last week" : "This week"} />
+            <StatCard icon={<IconBeaker size={22} />} label="Outstanding Balance" value={stats.data ? money(stats.data.outstanding) : "—"} sub="Unpaid & partial invoices" />
+          </>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, alignItems: "start" }}>
@@ -124,8 +136,12 @@ export function Dashboard({ go, isDoctor }: DashboardProps) {
             <button className="btn btn-ghost btn-sm" onClick={() => go("schedule")}>View Schedule <IconArrowRight size={14} /></button>
           </div>
           <div>
-            {appts.isLoading ? (
-              <div style={{ padding: 32, textAlign: "center", color: "var(--ink-500)" }}>Loading appointments…</div>
+            {appts.isPending ? (
+              <>
+                <AppointmentRowSkeleton />
+                <AppointmentRowSkeleton />
+                <AppointmentRowSkeleton />
+              </>
             ) : list.length === 0 ? (
               <div style={{ padding: 32, textAlign: "center", color: "var(--ink-500)" }}>No appointments scheduled today.</div>
             ) : (

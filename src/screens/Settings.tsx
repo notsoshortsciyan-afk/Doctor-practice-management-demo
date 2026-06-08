@@ -10,6 +10,7 @@ import {
 } from "../api/hooks";
 import { useAuth } from "../auth/AuthContext";
 import { Modal } from "../components/Modal";
+import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { ApiError } from "../api/client";
 import type { ApiSettings, ApiUser } from "../api/types";
 
@@ -235,7 +236,18 @@ function Staff() {
         <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>Add Staff</button>
       </div>
       {isLoading ? (
-        <div style={{ color: "var(--ink-500)" }}>Loading…</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, background: "var(--bg-soft)", borderRadius: 10 }}>
+              <Skeleton w={40} h={40} radius={999} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                <SkeletonText w={160} />
+                <SkeletonText w={200} />
+              </div>
+              <Skeleton w={90} h={22} radius={999} />
+            </div>
+          ))}
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {users.map((u: ApiUser) => (

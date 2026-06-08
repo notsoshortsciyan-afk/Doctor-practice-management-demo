@@ -3,6 +3,7 @@ import { IconCash } from "../icons";
 import { useInvoices, useRecordPayment, useStats } from "../api/hooks";
 import { Modal } from "../components/Modal";
 import { PatientBillingHistory } from "../components/PatientBillingHistory";
+import { SkeletonText, TableRowsSkeleton } from "../components/Skeleton";
 import type { ApiInvoice, InvoiceStatus } from "../api/types";
 import { money } from "../lib/money";
 
@@ -54,11 +55,15 @@ function PaymentModal({ invoice, onClose }: { invoice: ApiInvoice; onClose: () =
   );
 }
 
-function SummaryCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function SummaryCard({ label, value, accent, loading }: { label: string; value: string; accent?: boolean; loading?: boolean }) {
   return (
     <div className="card card-pad">
       <div className="eyebrow">{label}</div>
-      <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, fontSize: 28, marginTop: 6, color: accent ? "var(--danger-ink)" : "var(--navy-900)" }}>{value}</div>
+      {loading ? (
+        <SkeletonText w={110} style={{ height: 22, marginTop: 12 }} />
+      ) : (
+        <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, fontSize: 28, marginTop: 6, color: accent ? "var(--danger-ink)" : "var(--navy-900)" }}>{value}</div>
+      )}
     </div>
   );
 }
@@ -147,9 +152,9 @@ export function Billing({
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24, marginTop: 28 }}>
-        <SummaryCard label="Revenue (7 days)" value={stats.data ? money(stats.data.weeklyRevenue) : "—"} />
-        <SummaryCard label="Outstanding" value={stats.data ? money(stats.data.outstanding) : "—"} accent />
-        <SummaryCard label="Invoices" value={String(list.length)} />
+        <SummaryCard label="Revenue (7 days)" value={stats.data ? money(stats.data.weeklyRevenue) : "—"} loading={stats.isPending} />
+        <SummaryCard label="Outstanding" value={stats.data ? money(stats.data.outstanding) : "—"} accent loading={stats.isPending} />
+        <SummaryCard label="Invoices" value={String(list.length)} loading={isLoading} />
       </div>
 
       <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
@@ -169,7 +174,7 @@ export function Billing({
           <div className="col" style={{ textAlign: "right" }}>Actions</div>
         </div>
         {isLoading ? (
-          <div style={{ padding: 48, textAlign: "center", color: "var(--ink-500)", background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderTop: 0, borderRadius: "0 0 10px 10px" }}>Loading…</div>
+          <TableRowsSkeleton rows={6} cols={7} gridTemplateColumns="1.2fr 1.8fr 1fr 1fr 1fr 1fr 1.2fr" />
         ) : list.length === 0 ? (
           <div style={{ padding: 56, textAlign: "center", color: "var(--ink-500)", background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderTop: 0, borderRadius: "0 0 10px 10px" }}>
             <IconCash size={44} style={{ color: "var(--ink-300)", margin: "0 auto" }} />

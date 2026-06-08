@@ -18,6 +18,7 @@ import {
   IconUser,
 } from "../icons";
 import { usePatient, useCreateNote } from "../api/hooks";
+import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { PatientFormModal } from "../components/PatientFormModal";
 import { Modal } from "../components/Modal";
 import { RecordModal } from "../components/RecordModal";
@@ -103,6 +104,56 @@ function AddNoteModal({ patientId, onClose }: { patientId: string; onClose: () =
   );
 }
 
+// Holds the page scaffold (header card + two-column body) while the bundle loads,
+// instead of blanking the whole screen to a single line of text.
+function PatientDetailSkeleton() {
+  return (
+    <div className="page" data-screen-label="03 Patient Detail">
+      <div className="crumbs">
+        <a>Dashboard</a>
+        <IconChevR size={14} />
+        <a>Patients</a>
+      </div>
+
+      <div className="card" style={{ marginTop: 8, padding: 24, display: "flex", alignItems: "center", gap: 24 }}>
+        <Skeleton w={96} h={96} radius={12} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+          <Skeleton w={260} h={28} radius={6} />
+          <div style={{ display: "flex", gap: 16 }}>
+            <SkeletonText w={110} />
+            <SkeletonText w={90} />
+            <SkeletonText w={70} />
+          </div>
+          <Skeleton w={140} h={22} radius={999} />
+        </div>
+        <Skeleton w={110} h={40} radius={8} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, alignItems: "start", marginTop: 24 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <SkeletonText w={180} />
+            <SkeletonText />
+            <SkeletonText w="85%" />
+            <SkeletonText w="70%" />
+          </div>
+          <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <SkeletonText w={150} />
+            <Skeleton h={64} radius={10} />
+            <Skeleton h={64} radius={10} />
+          </div>
+        </div>
+        <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <SkeletonText w={120} />
+          <SkeletonText />
+          <SkeletonText w="80%" />
+          <SkeletonText w="60%" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PatientDetailProps {
   go: (r: Route) => void;
   patientId: string | null;
@@ -126,7 +177,7 @@ export function PatientDetail({ go, patientId, isDoctor, openInvoice }: PatientD
       </div>
     );
   }
-  if (isLoading) return <div className="page"><div className="lede">Loading patient…</div></div>;
+  if (isLoading) return <PatientDetailSkeleton />;
   if (isError || !data) return <div className="page"><div className="lede">Couldn't load this patient.</div></div>;
 
   const p: ApiPatient = data.patient;

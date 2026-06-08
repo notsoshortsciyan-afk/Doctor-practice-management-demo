@@ -18,13 +18,22 @@ import { Billing } from "./screens/Billing";
 import { Settings } from "./screens/Settings";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { Login } from "./auth/Login";
-import { useSettings } from "./api/hooks";
+import { prefetchRoute, useSettings } from "./api/hooks";
 import type { Route } from "./types";
 import type { RoleName } from "./api/types";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 30_000 } },
+  // gcTime kept generous so screens you've already visited render instantly from cache
+  // on revisit (refetched in the background) instead of blanking.
+  defaultOptions: {
+    queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 30_000, gcTime: 600_000 },
+  },
 });
+
+function todayYmd(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const NAV_ITEMS: { key: Route; label: string; roles: RoleName[] }[] = [
   { key: "dashboard", label: "Dashboard", roles: ["DOCTOR", "RECEPTIONIST"] },
@@ -101,6 +110,13 @@ function Shell() {
     const onHash = () => setRoute(getRoute());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Warm the most-used screens right after login so the first navigations feel instant.
+  useEffect(() => {
+    const today = todayYmd();
+    prefetchRoute(queryClient, "dashboard", today);
+    prefetchRoute(queryClient, "directory", today);
   }, []);
 
   const go = (r: Route) => {
@@ -183,6 +199,7 @@ function Shell() {
                 key={n.key}
                 className={`nav-link ${navKey === n.key ? "active" : ""}`}
                 onClick={() => go(n.key)}
+                onMouseEnter={() => prefetchRoute(queryClient, n.key, todayYmd())}
               >
                 {n.label}
               </button>

@@ -53,32 +53,29 @@ router.get(
       ];
     }
 
-    const rows = await prisma.patient.findMany({ where, include: patientListInclude });
-    let items = rows.map(serializePatient);
+    // Sort + paginate in SQL so work is bounded by pageSize, not the whole table.
+    // "next" is dead now that appointments aren't patient-linked; "recent" uses createdAt desc
+    // as a close proxy for the derived last-visit ordering.
+    const orderBy: Prisma.PatientOrderByWithRelationInput =
+      sort === "name" ? { name: "asc" } : sort === "id" ? { code: "asc" } : { createdAt: "desc" };
 
-    items.sort((a, b) => {
-      if (sort === "name") return a.name.localeCompare(b.name);
-      if (sort === "id") return a.code.localeCompare(b.code);
-      if (sort === "next") {
-        const ax = a.nextAppt ? new Date(a.nextAppt.iso).getTime() : Infinity;
-        const bx = b.nextAppt ? new Date(b.nextAppt.iso).getTime() : Infinity;
-        return ax - bx;
-      }
-      // recent (default): most recent last visit first
-      const ax = a.lastVisit ? new Date(a.lastVisit.iso).getTime() : 0;
-      const bx = b.lastVisit ? new Date(b.lastVisit.iso).getTime() : 0;
-      return bx - ax;
-    });
+    const [rows, total] = await Promise.all([
+      prisma.patient.findMany({
+        where,
+        include: patientListInclude,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.patient.count({ where }),
+    ]);
 
-    const total = items.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const start = (page - 1) * pageSize;
     res.json({
-      items: items.slice(start, start + pageSize),
+      items: rows.map(serializePatient),
       total,
       page,
       pageSize,
-      totalPages,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     });
   })
 );

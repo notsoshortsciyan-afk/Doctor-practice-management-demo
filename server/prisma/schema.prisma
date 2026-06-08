@@ -93,6 +93,8 @@ model Patient {
   procedures    Procedure[]
   invoices      Invoice[]
   documents     Document[]
+
+  @@index([status])
 }
 
 // Shared with the public clinic website. The website INSERTs customer bookings here;
@@ -113,6 +115,7 @@ model Appointment {
 
   @@index([appointmentDate], map: "idx_appointments_date")
   @@index([status], map: "idx_appointments_status")
+  @@index([appointmentDate, status], map: "idx_appointments_date_status")
   @@map("appointments")
 }
 
