@@ -76,7 +76,10 @@ export function Dashboard({ go, isDoctor }: DashboardProps) {
   const { user } = useAuth();
   const stats = useStats();
   // Use the client's local (clinic) date so "today" matches the receptionist's day.
-  const appts = useAppointments({ date: ymd(new Date()) });
+  const appts = useAppointments(
+    { date: ymd(new Date()) },
+    { refetchInterval: 30_000, refetchOnWindowFocus: true },
+  );
   const updateAppt = useUpdateAppointment();
   const [visible, setVisible] = useState(3);
 

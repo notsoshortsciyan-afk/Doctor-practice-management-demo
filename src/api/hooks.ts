@@ -83,20 +83,31 @@ export interface AppointmentQuery {
   today?: boolean;
 }
 
-export function useAppointments(params: AppointmentQuery) {
+// Light, per-call React Query knobs so each screen can pick its own polling cadence.
+// (Kept small on purpose — appointment data is the only place we need live refresh.)
+interface LiveQueryOptions {
+  refetchInterval?: number | false;
+  refetchOnWindowFocus?: boolean;
+  staleTime?: number;
+  enabled?: boolean;
+}
+
+export function useAppointments(params: AppointmentQuery, options?: LiveQueryOptions) {
   return useQuery({
     queryKey: ["appointments", params],
     queryFn: () => apiFetch<ApiAppointment[]>("/appointments", { params: params as ParamMap }),
+    ...options,
   });
 }
 
 // Which of the fixed slots are taken on a given day (for the manual-create picker).
-export function useSlotAvailability(date: string | null) {
+export function useSlotAvailability(date: string | null, options?: LiveQueryOptions) {
   return useQuery({
     queryKey: ["appointment-availability", date],
     queryFn: () =>
       apiFetch<ApiSlotAvailability>("/appointments/availability", { params: { date } }),
     enabled: !!date,
+    ...options,
   });
 }
 
@@ -119,6 +130,12 @@ export function useCreateAppointment() {
       qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
     },
+    // On a 409 (slot taken by the website a beat earlier), refetch so the picker
+    // greys out the just-taken slot immediately rather than at the next poll tick.
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
+    },
   });
 }
 
@@ -133,6 +150,11 @@ export function useUpdateAppointment() {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
+    },
+    // Same as create: a 409 on reschedule means the target slot was just taken — refetch now.
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
     },
   });
 }

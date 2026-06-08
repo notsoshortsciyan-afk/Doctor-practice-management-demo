@@ -67,7 +67,13 @@ function CreateModal({
   const [slot, setSlot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const availability = useSlotAvailability(date);
+  // This component only mounts while the create modal is open, so the 5s poll is
+  // naturally scoped to when the picker is on screen.
+  const availability = useSlotAvailability(date, {
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
   const slots = availability.data?.slots ?? APPOINTMENT_SLOTS.map((time) => ({ time, booked: false }));
 
   const submit = async () => {
@@ -241,7 +247,11 @@ export function Schedule({ showToast }: { showToast: (m: string) => void }) {
   const updateAppt = useUpdateAppointment();
   const deleteAppt = useDeleteAppointment();
 
-  const { data, isLoading } = useAppointments({ date: ymd(date), status: status || undefined });
+  // Primary booking surface — poll so website/front-desk bookings appear without a refresh.
+  const { data, isLoading } = useAppointments(
+    { date: ymd(date), status: status || undefined },
+    { refetchInterval: 7_000, refetchOnWindowFocus: true, staleTime: 0 },
+  );
   const list = data ?? [];
 
   const shift = (days: number) => setDate((d) => { const n = new Date(d); n.setDate(n.getDate() + days); return n; });
