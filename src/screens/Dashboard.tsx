@@ -9,7 +9,6 @@ import {
   IconChev,
   IconDot3V,
   IconTooth,
-  IconUser,
   IconUserPlus,
   IconUsers,
   IconX,
@@ -19,6 +18,10 @@ import { useAuth } from "../auth/AuthContext";
 import { money } from "../lib/money";
 import type { ApiAppointment, AppointmentStatus } from "../api/types";
 import type { Route } from "../types";
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function StatCard({ icon, label, value, delta, sub }: { icon: ReactNode; label: string; value: string | number; delta?: string; sub?: string }) {
   return (
@@ -36,20 +39,20 @@ function StatCard({ icon, label, value, delta, sub }: { icon: ReactNode; label: 
   );
 }
 
-function AppointmentRow({ appt, onUpdate, onView }: { appt: ApiAppointment; onUpdate: (s: AppointmentStatus) => void; onView: () => void }) {
+function AppointmentRow({ appt, onUpdate }: { appt: ApiAppointment; onUpdate: (s: AppointmentStatus) => void }) {
   const [open, setOpen] = useState(false);
-  const chipClass = appt.status === "Confirmed" ? "chip-confirmed" : appt.status === "Pending" ? "chip-pending" : "chip-inactive";
-  const initials = appt.patientName.split(" ").map((w) => w[0]).slice(0, 2).join("");
+  const chipClass = appt.status === "confirmed" ? "chip-confirmed" : appt.status === "pending" ? "chip-pending" : "chip-inactive";
+  const initials = appt.fullName.split(" ").map((w) => w[0]).slice(0, 2).join("");
   return (
     <div style={{ display: "grid", gridTemplateColumns: "70px 56px 1fr auto auto", gap: 16, alignItems: "center", padding: "18px 24px", borderTop: "1px solid var(--border-soft)" }}>
       <div>
-        <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--navy-900)", fontSize: 15 }}>{appt.time.split(" ")[0]}</div>
-        <div style={{ color: "var(--ink-500)", fontSize: 12 }}>{appt.time.split(" ")[1]}</div>
+        <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--navy-900)", fontSize: 15 }}>{appt.appointmentTime.split(" ")[0]}</div>
+        <div style={{ color: "var(--ink-500)", fontSize: 12 }}>{appt.appointmentTime.split(" ")[1]}</div>
       </div>
       <div className="placeholder-stripe" style={{ width: 40, height: 40, display: "grid", placeItems: "center", color: "var(--navy-900)", fontFamily: "var(--font-h)", fontWeight: 700, fontSize: 13 }}>{initials}</div>
       <div>
-        <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--navy-900)" }}>{appt.patientName}</div>
-        <div style={{ color: "var(--ink-500)", fontSize: 13, marginTop: 2 }}>{appt.procedure}</div>
+        <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--navy-900)" }}>{appt.fullName}</div>
+        <div style={{ color: "var(--ink-500)", fontSize: 13, marginTop: 2 }}>{appt.reason || "No reason given"}</div>
       </div>
       <span className={`chip ${chipClass}`} style={{ textTransform: "uppercase", letterSpacing: ".06em", fontSize: 11 }}>{appt.status}</span>
       <div className="menu-anchor">
@@ -60,10 +63,9 @@ function AppointmentRow({ appt, onUpdate, onView }: { appt: ApiAppointment; onUp
           <>
             <div style={{ position: "fixed", inset: 0, zIndex: 4 }} onClick={() => setOpen(false)} />
             <div className="menu">
-              <div className="menu-item" onClick={() => { onView(); setOpen(false); }}><IconUser size={16} /> View patient</div>
-              <div className="menu-item" onClick={() => { onUpdate("Confirmed"); setOpen(false); }}><IconCheck size={16} /> Mark confirmed</div>
-              <div className="menu-item" onClick={() => { onUpdate("Pending"); setOpen(false); }}><IconCalendar size={16} /> Mark pending</div>
-              <div className="menu-item danger" onClick={() => { onUpdate("Cancelled"); setOpen(false); }}><IconX size={16} /> Cancel</div>
+              <div className="menu-item" onClick={() => { onUpdate("confirmed"); setOpen(false); }}><IconCheck size={16} /> Mark confirmed</div>
+              <div className="menu-item" onClick={() => { onUpdate("pending"); setOpen(false); }}><IconCalendar size={16} /> Mark pending</div>
+              <div className="menu-item danger" onClick={() => { onUpdate("cancelled"); setOpen(false); }}><IconX size={16} /> Cancel</div>
             </div>
           </>
         )}
@@ -74,21 +76,21 @@ function AppointmentRow({ appt, onUpdate, onView }: { appt: ApiAppointment; onUp
 
 interface DashboardProps {
   go: (r: Route) => void;
-  openPatient: (id: string) => void;
   isDoctor: boolean;
 }
 
-export function Dashboard({ go, openPatient, isDoctor }: DashboardProps) {
+export function Dashboard({ go, isDoctor }: DashboardProps) {
   const { user } = useAuth();
   const stats = useStats();
-  const appts = useAppointments({ today: true });
+  // Use the client's local (clinic) date so "today" matches the receptionist's day.
+  const appts = useAppointments({ date: ymd(new Date()) });
   const updateAppt = useUpdateAppointment();
   const [visible, setVisible] = useState(3);
 
   const list = appts.data ?? [];
-  const active = list.filter((a) => a.status !== "Cancelled");
-  const confirmedToday = list.filter((a) => a.status === "Confirmed").length;
-  const pendingToday = list.filter((a) => a.status === "Pending").length;
+  const active = list.filter((a) => a.status !== "cancelled");
+  const confirmedToday = list.filter((a) => a.status === "confirmed").length;
+  const pendingToday = list.filter((a) => a.status === "pending").length;
   const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
   const revenueDelta =
@@ -132,7 +134,7 @@ export function Dashboard({ go, openPatient, isDoctor }: DashboardProps) {
               <div style={{ padding: 32, textAlign: "center", color: "var(--ink-500)" }}>No appointments scheduled today.</div>
             ) : (
               list.slice(0, visible).map((a) => (
-                <AppointmentRow key={a.id} appt={a} onUpdate={(s) => updateAppt.mutate({ id: a.id, data: { status: s } })} onView={() => openPatient(a.patientId)} />
+                <AppointmentRow key={a.id} appt={a} onUpdate={(s) => updateAppt.mutate({ id: a.id, data: { status: s } })} />
               ))
             )}
           </div>

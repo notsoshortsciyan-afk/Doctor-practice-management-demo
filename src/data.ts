@@ -139,3 +139,11 @@ export const CLINICAL_NOTES: ClinicalNote[] = [
 export const TESTS = [
   "CBC","X-ray (IOPA)","OPG","CBCT","ECG","RBS","S. Creatinine","MRI","CXR","ANA","HbA1c",
 ];
+
+// Fixed appointment slots — MUST mirror the public website (and server/src/lib/slots.ts)
+// so booked-vs-free is computed against the identical labels. The slot availability API
+// returns these with booked flags; this list is the picker's fallback/ordering.
+export const APPOINTMENT_SLOTS = [
+  "03:00 PM","03:45 PM","04:30 PM","05:15 PM","06:00 PM",
+  "06:45 PM","07:30 PM","08:15 PM","09:00 PM","09:45 PM",
+];

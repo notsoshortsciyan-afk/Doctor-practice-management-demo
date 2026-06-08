@@ -156,7 +156,7 @@ function Shell() {
   } else if (route === "entry" && isDoctor) {
     screen = <NewEntry go={go} showToast={showToast} />;
   } else if (route === "schedule") {
-    screen = <Schedule openPatient={openPatient} showToast={showToast} />;
+    screen = <Schedule showToast={showToast} />;
   } else if (route === "records" && isDoctor) {
     screen = <Records openPatient={openPatient} />;
   } else if (route === "rx" && isDoctor) {
@@ -166,7 +166,7 @@ function Shell() {
   } else if (route === "settings") {
     screen = <Settings isDoctor={isDoctor} showToast={showToast} />;
   } else {
-    screen = <Dashboard go={go} openPatient={openPatient} isDoctor={isDoctor} />;
+    screen = <Dashboard go={go} isDoctor={isDoctor} />;
   }
 
   return (

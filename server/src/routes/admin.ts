@@ -8,6 +8,8 @@ const router = Router();
 // DOCTOR-only: permanently delete ALL patient/clinical data, leaving staff accounts
 // and user settings untouched. Used by the "Delete all patient data" button in
 // Settings to clear test data. Deletions run in FK-safe order (children first).
+// NOTE: the `appointments` table is deliberately NOT wiped — it is shared with the
+// public website and holds live customer bookings; clearing it here would destroy them.
 router.post(
   "/wipe",
   requireAuth,
@@ -21,7 +23,6 @@ router.post(
       clinicalNotes,
       procedures,
       documents,
-      appointments,
       patients,
     ] = await prisma.$transaction([
       prisma.payment.deleteMany(),
@@ -31,7 +32,6 @@ router.post(
       prisma.clinicalNote.deleteMany(),
       prisma.procedure.deleteMany(),
       prisma.document.deleteMany(),
-      prisma.appointment.deleteMany(),
       prisma.patient.deleteMany(),
     ]);
 
@@ -39,7 +39,6 @@ router.post(
       ok: true,
       deleted: {
         patients: patients.count,
-        appointments: appointments.count,
         prescriptions: prescriptions.count,
         prescriptionMedicines: prescriptionMedicines.count,
         clinicalNotes: clinicalNotes.count,

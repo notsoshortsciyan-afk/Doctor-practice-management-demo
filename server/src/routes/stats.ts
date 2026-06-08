@@ -2,21 +2,16 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { wrap } from "../middleware/validate";
 import { requireAuth } from "../middleware/auth";
+import { DAILY_CAPACITY, clinicToday, dateOnlyUTC } from "../lib/slots";
 
 const router = Router();
 router.use(requireAuth);
-
-// Daily chair capacity assumption for utilization (clinic open ~9–17, 30-min slots).
-const DAILY_CAPACITY = 16;
 
 router.get(
   "/",
   wrap(async (_req, res) => {
     const now = new Date();
-    const startToday = new Date(now);
-    startToday.setHours(0, 0, 0, 0);
-    const endToday = new Date(startToday);
-    endToday.setDate(endToday.getDate() + 1);
+    const today = dateOnlyUTC(clinicToday());
 
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -27,10 +22,10 @@ router.get(
       await Promise.all([
         prisma.patient.count(),
         prisma.appointment.count({
-          where: { dateTime: { gte: startToday, lt: endToday }, status: { not: "Cancelled" } },
+          where: { appointmentDate: today, status: { not: "cancelled" } },
         }),
         prisma.appointment.count({
-          where: { dateTime: { gte: startToday, lt: endToday }, status: "Pending" },
+          where: { appointmentDate: today, status: "pending" },
         }),
         prisma.payment.aggregate({ _sum: { amount: true }, where: { date: { gte: weekAgo } } }),
         prisma.payment.aggregate({

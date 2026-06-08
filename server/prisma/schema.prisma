@@ -37,12 +37,6 @@ enum RiskLevel {
   HIGH
 }
 
-enum AppointmentStatus {
-  Confirmed
-  Pending
-  Cancelled
-}
-
 enum InvoiceStatus {
   Paid
   Partial
@@ -60,7 +54,6 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  appointments  Appointment[]
   prescriptions Prescription[]
   clinicalNotes ClinicalNote[]
   settings      UserSettings?
@@ -95,7 +88,6 @@ model Patient {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  appointments  Appointment[]
   prescriptions Prescription[]
   clinicalNotes ClinicalNote[]
   procedures    Procedure[]
@@ -103,20 +95,25 @@ model Patient {
   documents     Document[]
 }
 
+// Shared with the public clinic website. The website INSERTs customer bookings here;
+// the dashboard SELECTs/UPDATEs/INSERTs (source='manual') against the SAME table.
+// Mapped to the website's existing snake_case columns — do NOT change column types/names.
+// Not patient-linked: bookings carry only a name + contact (see _design note in CLAUDE.md).
 model Appointment {
-  id         String            @id @default(cuid())
-  patientId  String
-  patient    Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  providerId String?
-  provider   User?             @relation(fields: [providerId], references: [id])
-  dateTime   DateTime
-  procedure  String
-  status     AppointmentStatus @default(Pending)
-  notes      String?
-  createdAt  DateTime          @default(now())
+  id              BigInt   @id @default(autoincrement())
+  fullName        String   @map("full_name")
+  contactNumber   String   @map("contact_number")
+  email           String?
+  reason          String?
+  appointmentDate DateTime @map("appointment_date") @db.Date
+  appointmentTime String   @map("appointment_time") // display label, e.g. "04:30 PM"
+  status          String   @default("pending") // pending | confirmed | cancelled
+  source          String   @default("website") // website | manual
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@index([dateTime])
-  @@index([patientId])
+  @@index([appointmentDate], map: "idx_appointments_date")
+  @@index([status], map: "idx_appointments_status")
+  @@map("appointments")
 }
 
 model Prescription {

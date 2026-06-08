@@ -1,4 +1,4 @@
-import { Prisma, type PatientStatus } from "@prisma/client";
+import { Prisma, type PatientStatus, type Appointment } from "@prisma/client";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -34,15 +34,11 @@ function money(n: number): string {
   return `৳${Math.round(n)}`;
 }
 
-function startOfToday(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 // ---- Patient (list / card) ----
 export const patientListInclude = {
-  appointments: true,
+  // Most recent prescription date powers "Last Visit" now that appointments are
+  // no longer patient-linked (they live in the shared website table).
+  prescriptions: { select: { date: true }, orderBy: { date: "desc" }, take: 1 },
   invoices: { include: { payments: true } },
 } satisfies Prisma.PatientInclude;
 
@@ -58,12 +54,10 @@ export function patientBalance(p: { invoices: { total: number; payments: { amoun
 }
 
 export function serializePatient(p: PatientForList) {
-  const now = Date.now();
-  const today = startOfToday();
-  const byTime = [...p.appointments].sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
-  const lastVisit = byTime.filter((a) => a.dateTime.getTime() < now && a.status !== "Cancelled").pop() ?? null;
-  const nextAppt =
-    byTime.find((a) => a.dateTime.getTime() >= today && a.status !== "Cancelled") ?? null;
+  // Appointments now live in the shared website table keyed by name/phone, not by
+  // patientId — so there is no per-patient "next appointment". "Last Visit" falls
+  // back to the patient's latest prescription, then to their registration date.
+  const lastPrescription = p.prescriptions[0] ?? null;
 
   return {
     id: p.id,
@@ -81,37 +75,28 @@ export function serializePatient(p: PatientForList) {
     medications: p.medications,
     address: p.address,
     avatarHue: p.avatarHue,
-    lastVisit: lastVisit ? dateInfo(lastVisit.dateTime) : dateInfo(p.createdAt),
-    nextAppt: nextAppt ? dateInfo(nextAppt.dateTime) : null,
-    apptTime: nextAppt ? timeLabel(nextAppt.dateTime) : null,
-    procedure: nextAppt ? nextAppt.procedure : null,
+    lastVisit: dateInfo(lastPrescription?.date ?? p.createdAt),
+    nextAppt: null as ReturnType<typeof dateInfo>,
+    apptTime: null as string | null,
+    procedure: null as string | null,
     balance: money(patientBalance(p)),
   };
 }
 
-// ---- Appointment ----
-export const appointmentInclude = {
-  patient: { select: { id: true, code: true, name: true, avatarHue: true } },
-  provider: { select: { id: true, name: true } },
-} satisfies Prisma.AppointmentInclude;
-
-export type AppointmentForList = Prisma.AppointmentGetPayload<{ include: typeof appointmentInclude }>;
-
-export function serializeAppointment(a: AppointmentForList) {
+// ---- Appointment (shared website table) ----
+// Standalone bookings (name + contact + slot), shared with the public website.
+export function serializeAppointment(a: Appointment) {
   return {
-    id: a.id,
-    patientId: a.patientId,
-    patientName: a.patient.name,
-    patientCode: a.patient.code,
-    avatarHue: a.patient.avatarHue,
-    providerId: a.providerId,
-    providerName: a.provider?.name ?? null,
-    dateTime: a.dateTime.toISOString(),
-    date: dateInfo(a.dateTime),
-    time: timeLabel(a.dateTime),
-    procedure: a.procedure,
+    id: a.id.toString(), // BigInt → string: res.json cannot serialize BigInt
+    fullName: a.fullName,
+    contactNumber: a.contactNumber,
+    email: a.email,
+    reason: a.reason,
+    appointmentDate: a.appointmentDate.toISOString().slice(0, 10), // YYYY-MM-DD
+    appointmentTime: a.appointmentTime,
     status: a.status,
-    notes: a.notes,
+    source: a.source,
+    createdAt: a.createdAt.toISOString(),
   };
 }
 

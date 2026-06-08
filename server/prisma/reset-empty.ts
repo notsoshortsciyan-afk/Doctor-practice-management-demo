@@ -16,7 +16,8 @@ async function main() {
   await prisma.clinicalNote.deleteMany();
   await prisma.procedure.deleteMany();
   await prisma.document.deleteMany();
-  await prisma.appointment.deleteMany();
+  // NOTE: `appointments` is shared with the public website (live customer bookings) —
+  // intentionally NOT cleared here.
   await prisma.patient.deleteMany();
 
   // Ensure both demo logins exist (idempotent — works even on a blank DB).
@@ -46,13 +47,12 @@ async function main() {
     },
   });
 
-  const [users, patients, appointments, invoices] = await Promise.all([
+  const [users, patients, invoices] = await Promise.all([
     prisma.user.count(),
     prisma.patient.count(),
-    prisma.appointment.count(),
     prisma.invoice.count(),
   ]);
-  console.log("Reset complete:", { users, patients, appointments, invoices });
+  console.log("Reset complete:", { users, patients, invoices });
   console.log("Demo logins: doctor@dentalcare.test / doctor123 · reception@dentalcare.test / reception123");
 }
 

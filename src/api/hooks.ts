@@ -10,6 +10,7 @@ import type {
   ApiPatientBundle,
   ApiPrescription,
   ApiSettings,
+  ApiSlotAvailability,
   ApiStats,
   ApiUser,
   PatientListResponse,
@@ -75,12 +76,11 @@ export function useSavePatient() {
   });
 }
 
-// ---------- Appointments ----------
+// ---------- Appointments (shared website table) ----------
 export interface AppointmentQuery {
-  from?: string;
-  to?: string;
+  date?: string; // YYYY-MM-DD (single day)
+  status?: string; // pending | confirmed | cancelled
   today?: boolean;
-  patientId?: string;
 }
 
 export function useAppointments(params: AppointmentQuery) {
@@ -90,20 +90,34 @@ export function useAppointments(params: AppointmentQuery) {
   });
 }
 
+// Which of the fixed slots are taken on a given day (for the manual-create picker).
+export function useSlotAvailability(date: string | null) {
+  return useQuery({
+    queryKey: ["appointment-availability", date],
+    queryFn: () =>
+      apiFetch<ApiSlotAvailability>("/appointments/availability", { params: { date } }),
+    enabled: !!date,
+  });
+}
+
+export interface AppointmentInput {
+  fullName: string;
+  contactNumber: string;
+  email?: string;
+  reason?: string;
+  appointmentDate: string; // YYYY-MM-DD
+  appointmentTime: string; // fixed slot label
+}
+
 export function useCreateAppointment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      patientId: string;
-      dateTime: string;
-      procedure: string;
-      status?: string;
-      notes?: string;
-    }) => apiFetch<ApiAppointment>("/appointments", { method: "POST", body: data }),
+    mutationFn: (data: AppointmentInput) =>
+      apiFetch<ApiAppointment>("/appointments", { method: "POST", body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
-      qc.invalidateQueries({ queryKey: ["patients"] });
     },
   });
 }
@@ -113,10 +127,11 @@ export function useUpdateAppointment() {
   return useMutation({
     mutationFn: (vars: {
       id: string;
-      data: { dateTime?: string; procedure?: string; status?: string; notes?: string };
+      data: { status?: string; appointmentDate?: string; appointmentTime?: string };
     }) => apiFetch<ApiAppointment>(`/appointments/${vars.id}`, { method: "PATCH", body: vars.data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
     },
   });
@@ -128,6 +143,7 @@ export function useDeleteAppointment() {
     mutationFn: (id: string) => apiFetch(`/appointments/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
     },
   });

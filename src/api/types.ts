@@ -14,7 +14,8 @@ export interface ApiStatus {
 
 export type RiskLevel = "LOW" | "MED" | "HIGH";
 export type Gender = "Male" | "Female" | "Other";
-export type AppointmentStatus = "Confirmed" | "Pending" | "Cancelled";
+export type AppointmentStatus = "pending" | "confirmed" | "cancelled";
+export type AppointmentSource = "website" | "manual";
 export type InvoiceStatus = "Paid" | "Partial" | "Unpaid" | "Overdue";
 
 export interface ApiUser {
@@ -64,20 +65,24 @@ export interface PatientListResponse {
   totalPages: number;
 }
 
+// Shared booking from the public website's `appointments` table (or source='manual'
+// when created in the dashboard). Not linked to a patient record.
 export interface ApiAppointment {
   id: string;
-  patientId: string;
-  patientName: string;
-  patientCode: string;
-  avatarHue: number;
-  providerId: string | null;
-  providerName: string | null;
-  dateTime: string;
-  date: ApiDateInfo | null;
-  time: string;
-  procedure: string;
+  fullName: string;
+  contactNumber: string;
+  email: string | null;
+  reason: string | null;
+  appointmentDate: string; // "YYYY-MM-DD"
+  appointmentTime: string; // fixed slot label, e.g. "04:30 PM"
   status: AppointmentStatus;
-  notes: string | null;
+  source: AppointmentSource;
+  createdAt: string; // ISO timestamp
+}
+
+export interface ApiSlotAvailability {
+  date: string; // "YYYY-MM-DD"
+  slots: { time: string; booked: boolean }[];
 }
 
 export interface ApiMedicine {
