@@ -36,6 +36,22 @@ function queryString(params?: ParamMap): string {
   return s ? `?${s}` : "";
 }
 
+// Turn a server error body into a human message. Zod's `validate` middleware
+// returns { error: "Validation failed", details: <flatten()> }; on its own that
+// tells the user nothing, so fold the offending field(s) into the message.
+function errorMessage(data: unknown, fallback: string): string {
+  const body = data as { error?: string; details?: { formErrors?: string[]; fieldErrors?: Record<string, string[]> } } | null;
+  const base = body?.error || fallback;
+  const details = body?.details;
+  if (!details) return base;
+  const parts: string[] = [];
+  for (const [field, errs] of Object.entries(details.fieldErrors ?? {})) {
+    if (errs?.length) parts.push(`${field}: ${errs[0]}`);
+  }
+  if (details.formErrors?.length) parts.push(...details.formErrors);
+  return parts.length ? `${base} — ${parts.join("; ")}` : base;
+}
+
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -62,7 +78,7 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, (data && data.error) || res.statusText);
+    throw new ApiError(res.status, errorMessage(data, res.statusText));
   }
   return data as T;
 }

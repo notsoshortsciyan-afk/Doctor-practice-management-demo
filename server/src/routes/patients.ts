@@ -108,11 +108,18 @@ router.get(
   })
 );
 
+// Coerce + clamp to a sane human range so a fat-fingered age (e.g. 150, 1120)
+// never blocks a save — it lands at the nearest valid value instead of a 400.
+const ageField = z.coerce
+  .number()
+  .catch(0)
+  .transform((n) => Math.min(130, Math.max(0, Math.round(n))));
+
 const patientBody = z.object({
   name: z.string().min(1),
   phone: z.string().min(1),
   email: z.string().email().optional().or(z.literal("")),
-  age: z.coerce.number().int().min(0).max(130),
+  age: ageField,
   gender: z.enum(["Male", "Female", "Other"]),
   blood: z.string().optional(),
   status: z.enum(["Active", "Follow-up", "Inactive", "Pending"]).optional(),

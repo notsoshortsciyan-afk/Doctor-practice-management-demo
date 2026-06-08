@@ -62,11 +62,22 @@ router.get(
   })
 );
 
+// Medicine rows are forgiving: a row with no name is dropped in the handler, and
+// a missing/blank frequency or duration is treated as empty rather than a 400.
+const medStr = z.preprocess((v) => v ?? "", z.string());
 const medSchema = z.object({
-  name: z.string(),
-  dose: z.string(),
-  days: z.string(),
+  name: medStr,
+  dose: medStr,
+  days: medStr,
 });
+
+// Coerce + clamp to a sane human range so a fat-fingered age (e.g. 150, 1120)
+// never blocks a save — it lands at the nearest valid value instead of a 400.
+// (Kept identical to the patients route's age handling.)
+const ageField = z.coerce
+  .number()
+  .catch(0)
+  .transform((n) => Math.min(130, Math.max(0, Math.round(n))));
 
 const createSchema = z
   .object({
@@ -76,8 +87,11 @@ const createSchema = z
       .object({
         name: z.string().min(1),
         phone: z.string().min(1),
-        age: z.coerce.number().int().min(0).max(130),
-        gender: z.enum(["Male", "Female", "Other"]),
+        age: ageField,
+        gender: z.preprocess(
+          (v) => (v === "Male" || v === "Female" ? v : "Other"),
+          z.enum(["Male", "Female", "Other"]),
+        ),
       })
       .optional(),
     complaint: z.string().optional().default(""),
@@ -88,7 +102,8 @@ const createSchema = z
     teeth: z.record(z.string()).optional().default({}),
     tests: z.array(z.string()).optional().default([]),
     meds: z.array(medSchema).optional().default([]),
-    invoiceAmount: z.number().positive().optional(),
+    // Coerce so a stringified amount still parses; the handler ignores anything <= 0.
+    invoiceAmount: z.coerce.number().optional(),
   })
   .refine((d) => d.patientId || d.newPatient, {
     message: "Provide patientId or newPatient",
@@ -155,7 +170,7 @@ router.post(
       );
     }
 
-    if (body.invoiceAmount) {
+    if (body.invoiceAmount && body.invoiceAmount > 0) {
       const count = await prisma.invoice.count();
       const number = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
