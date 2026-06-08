@@ -4,10 +4,10 @@ import {
   IconCheck,
   IconChevL,
   IconChevR,
-  IconDot3V,
   IconPlus,
   IconX,
 } from "../icons";
+import { KebabMenu } from "../components/KebabMenu";
 import {
   useAppointments,
   useCreateAppointment,
@@ -189,7 +189,6 @@ function ApptCard({
   onStatus: (s: AppointmentStatus) => void;
   onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const chip =
     appt.status === "confirmed" ? "chip-confirmed" : appt.status === "pending" ? "chip-pending" : "chip-inactive";
   return (
@@ -215,26 +214,22 @@ function ApptCard({
         <SourceBadge source={appt.source} />
         <span className={`chip ${chip}`} style={{ textTransform: "uppercase", fontSize: 11, letterSpacing: ".06em" }}>{titleCase(appt.status)}</span>
       </div>
-      <div className="menu-anchor">
-        <button className="btn btn-ghost btn-sm" style={{ width: 32, padding: 0 }} onClick={() => setOpen((o) => !o)}><IconDot3V size={18} /></button>
-        {open && (
+      <KebabMenu>
+        {(close) => (
           <>
-            <div style={{ position: "fixed", inset: 0, zIndex: 4 }} onClick={() => setOpen(false)} />
-            <div className="menu" style={{ right: 0 }}>
-              {appt.status !== "confirmed" && (
-                <div className="menu-item" onClick={() => { onStatus("confirmed"); setOpen(false); }}><IconCheck size={16} /> Confirm</div>
-              )}
-              {appt.status === "cancelled" && (
-                <div className="menu-item" onClick={() => { onStatus("pending"); setOpen(false); }}><IconCalendar size={16} /> Reopen (pending)</div>
-              )}
-              {appt.status !== "cancelled" && (
-                <div className="menu-item danger" onClick={() => { onStatus("cancelled"); setOpen(false); }}><IconX size={16} /> Cancel</div>
-              )}
-              <div className="menu-item danger" onClick={() => { onDelete(); setOpen(false); }}><IconX size={16} /> Delete</div>
-            </div>
+            {appt.status !== "confirmed" && (
+              <div className="menu-item" onClick={() => { onStatus("confirmed"); close(); }}><IconCheck size={16} /> Confirm</div>
+            )}
+            {appt.status === "cancelled" && (
+              <div className="menu-item" onClick={() => { onStatus("pending"); close(); }}><IconCalendar size={16} /> Reopen (pending)</div>
+            )}
+            {appt.status !== "cancelled" && (
+              <div className="menu-item danger" onClick={() => { onStatus("cancelled"); close(); }}><IconX size={16} /> Cancel</div>
+            )}
+            <div className="menu-item danger" onClick={() => { onDelete(); close(); }}><IconX size={16} /> Delete</div>
           </>
         )}
-      </div>
+      </KebabMenu>
     </div>
   );
 }

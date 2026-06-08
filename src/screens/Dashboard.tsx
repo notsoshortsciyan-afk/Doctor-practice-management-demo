@@ -7,13 +7,13 @@ import {
   IconCash,
   IconCheck,
   IconChev,
-  IconDot3V,
   IconTooth,
   IconUserPlus,
   IconUsers,
   IconX,
 } from "../icons";
 import { useAppointments, useStats, useUpdateAppointment } from "../api/hooks";
+import { KebabMenu } from "../components/KebabMenu";
 import { useAuth } from "../auth/AuthContext";
 import { money } from "../lib/money";
 import type { ApiAppointment, AppointmentStatus } from "../api/types";
@@ -40,7 +40,6 @@ function StatCard({ icon, label, value, delta, sub }: { icon: ReactNode; label: 
 }
 
 function AppointmentRow({ appt, onUpdate }: { appt: ApiAppointment; onUpdate: (s: AppointmentStatus) => void }) {
-  const [open, setOpen] = useState(false);
   const chipClass = appt.status === "confirmed" ? "chip-confirmed" : appt.status === "pending" ? "chip-pending" : "chip-inactive";
   const initials = appt.fullName.split(" ").map((w) => w[0]).slice(0, 2).join("");
   return (
@@ -55,21 +54,15 @@ function AppointmentRow({ appt, onUpdate }: { appt: ApiAppointment; onUpdate: (s
         <div style={{ color: "var(--ink-500)", fontSize: 13, marginTop: 2 }}>{appt.reason || "No reason given"}</div>
       </div>
       <span className={`chip ${chipClass}`} style={{ textTransform: "uppercase", letterSpacing: ".06em", fontSize: 11 }}>{appt.status}</span>
-      <div className="menu-anchor">
-        <button className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32 }} onClick={() => setOpen((o) => !o)}>
-          <IconDot3V size={18} />
-        </button>
-        {open && (
+      <KebabMenu>
+        {(close) => (
           <>
-            <div style={{ position: "fixed", inset: 0, zIndex: 4 }} onClick={() => setOpen(false)} />
-            <div className="menu">
-              <div className="menu-item" onClick={() => { onUpdate("confirmed"); setOpen(false); }}><IconCheck size={16} /> Mark confirmed</div>
-              <div className="menu-item" onClick={() => { onUpdate("pending"); setOpen(false); }}><IconCalendar size={16} /> Mark pending</div>
-              <div className="menu-item danger" onClick={() => { onUpdate("cancelled"); setOpen(false); }}><IconX size={16} /> Cancel</div>
-            </div>
+            <div className="menu-item" onClick={() => { onUpdate("confirmed"); close(); }}><IconCheck size={16} /> Mark confirmed</div>
+            <div className="menu-item" onClick={() => { onUpdate("pending"); close(); }}><IconCalendar size={16} /> Mark pending</div>
+            <div className="menu-item danger" onClick={() => { onUpdate("cancelled"); close(); }}><IconX size={16} /> Cancel</div>
           </>
         )}
-      </div>
+      </KebabMenu>
     </div>
   );
 }
