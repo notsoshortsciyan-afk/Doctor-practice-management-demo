@@ -24,9 +24,12 @@ import type { RoleName } from "./api/types";
 
 const queryClient = new QueryClient({
   // gcTime kept generous so screens you've already visited render instantly from cache
-  // on revisit (refetched in the background) instead of blanking.
+  // on revisit (refetched in the background) instead of blanking. staleTime is long
+  // because every write path invalidates the relevant keys explicitly (see hooks.ts),
+  // so cached data only goes stale on an actual mutation — letting revisits skip the
+  // refetch/skeleton flash entirely. Appointments override this with their own polling.
   defaultOptions: {
-    queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 30_000, gcTime: 600_000 },
+    queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 300_000, gcTime: 600_000 },
   },
 });
 

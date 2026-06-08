@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { IconFile, IconSearch } from "../icons";
 import { usePrescriptions } from "../api/hooks";
 import { RecordModal } from "../components/RecordModal";
@@ -8,8 +8,18 @@ import type { ApiPrescription } from "../api/types";
 export function Records({ openPatient }: { openPatient: (id: string) => void }) {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<ApiPrescription | null>(null);
-  const { data, isLoading } = usePrescriptions({ q, limit: 100 });
-  const list = data ?? [];
+  // Fetch the archive once (stable cache key, no `q`) and search in memory so
+  // typing filters instantly instead of firing a request per keystroke.
+  const { data, isLoading } = usePrescriptions({ limit: 2000 });
+  const all = data ?? [];
+  const list = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return all;
+    return all.filter((rx) =>
+      [rx.patient.name, rx.patient.code, rx.diagnosis, rx.complaint]
+        .some((f) => f?.toLowerCase().includes(term))
+    );
+  }, [all, q]);
 
   return (
     <div className="page" data-screen-label="Records">

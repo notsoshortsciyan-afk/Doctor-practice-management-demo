@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconCash } from "../icons";
 import { useInvoices, useRecordPayment, useStats } from "../api/hooks";
 import { Modal } from "../components/Modal";
@@ -126,8 +126,14 @@ export function Billing({
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrolledRef = useRef(false);
   const stats = useStats();
-  const { data, isLoading } = useInvoices({ status: filter === "All" ? "" : filter });
-  const list = data ?? [];
+  // Fetch every invoice once (stable cache key) and switch filter tabs in memory
+  // so clicking a status is instant instead of a fresh server round-trip each time.
+  const { data, isLoading } = useInvoices({});
+  const all = data ?? [];
+  const list = useMemo(
+    () => (filter === "All" ? all : all.filter((inv) => inv.status === filter)),
+    [all, filter]
+  );
 
   // Deep-link from a patient's profile: highlight + scroll to that invoice once,
   // then clear it from the parent so re-visiting Billing doesn't re-trigger.

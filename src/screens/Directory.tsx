@@ -8,6 +8,7 @@ import {
   IconSearch,
 } from "../icons";
 import { usePatients } from "../api/hooks";
+import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { TableRowsSkeleton } from "../components/Skeleton";
 import type { ApiPatient } from "../api/types";
 
@@ -145,19 +146,23 @@ export function Directory({ openPatient, initialQuery }: DirectoryProps) {
   const [sort, setSort] = useState<SortKey>("recent");
   const [page, setPage] = useState(1);
 
+  // Drive the query off a debounced copy of the search box so each keystroke
+  // updates the input instantly but only fires one request once typing pauses.
+  const debouncedQ = useDebouncedValue(q, 250);
+
   useEffect(() => {
     setPage(1);
-  }, [q, status, sort]);
+  }, [debouncedQ, status, sort]);
 
   const params = useMemo(
     () => ({
-      q,
+      q: debouncedQ,
       status: status === "All Statuses" ? "" : status,
       sort,
       page,
       pageSize: PAGE_SIZE,
     }),
-    [q, status, sort, page]
+    [debouncedQ, status, sort, page]
   );
 
   const { data, isLoading, isError } = usePatients(params);

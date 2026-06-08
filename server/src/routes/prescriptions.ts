@@ -26,7 +26,10 @@ router.get(
   wrap(async (req, res) => {
     const q = String(req.query.q ?? "").trim();
     const patientId = req.query.patientId ? String(req.query.patientId) : undefined;
-    const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    // Cap is generous so the Records screen can load the whole archive once and
+    // search it in memory (instant, no per-keystroke fetch). A solo practice's
+    // archive stays well within this; revisit if it ever approaches the cap.
+    const take = Math.min(2000, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
 
     const where: Prisma.PrescriptionWhereInput = {};
     if (patientId) where.patientId = patientId;

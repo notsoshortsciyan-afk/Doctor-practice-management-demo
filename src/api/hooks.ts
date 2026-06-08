@@ -42,11 +42,11 @@ export function prefetchRoute(qc: QueryClient, route: string, today: string) {
       break;
     }
     case "records":
-      pf(["prescriptions", { q: "", limit: 100 }], "/prescriptions", { q: "", limit: 100 });
+      pf(["prescriptions", { limit: 2000 }], "/prescriptions", { limit: 2000 });
       break;
     case "billing":
       pf(["stats"], "/stats");
-      pf(["invoices", { status: "" }], "/billing/invoices", { status: "" });
+      pf(["invoices", {}], "/billing/invoices");
       break;
   }
 }
