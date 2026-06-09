@@ -6,6 +6,7 @@ import { validate, wrap } from "../middleware/validate";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { HttpError } from "../middleware/error";
 import { prescriptionInclude, serializePrescription } from "../lib/serialize";
+import { nextInvoiceNumber } from "../lib/invoiceNumber";
 
 const router = Router();
 router.use(requireAuth);
@@ -174,8 +175,7 @@ router.post(
     }
 
     if (body.invoiceAmount && body.invoiceAmount > 0) {
-      const count = await prisma.invoice.count();
-      const number = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+      const number = await nextInvoiceNumber();
 
       operations.push(
         prisma.invoice.create({

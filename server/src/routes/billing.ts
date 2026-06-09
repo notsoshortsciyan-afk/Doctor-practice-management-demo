@@ -6,6 +6,7 @@ import { validate, wrap } from "../middleware/validate";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { HttpError } from "../middleware/error";
 import { serializeInvoice } from "../lib/serialize";
+import { nextInvoiceNumber } from "../lib/invoiceNumber";
 
 const router = Router();
 router.use(requireAuth);
@@ -21,12 +22,6 @@ function computeStatus(total: number, paid: number, date: Date): InvoiceStatus {
   // unpaid & past due (older than 30 days) → Overdue
   const ageDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
   return ageDays > 30 ? "Overdue" : "Unpaid";
-}
-
-async function genInvoiceNumber(): Promise<string> {
-  const count = await prisma.invoice.count();
-  const year = new Date().getFullYear();
-  return `INV-${year}-${String(count + 1).padStart(4, "0")}`;
 }
 
 // GET /api/billing/invoices?patientId=&status=
@@ -63,7 +58,7 @@ router.post(
     const inv = await prisma.invoice.create({
       data: {
         patientId: b.patientId,
-        number: await genInvoiceNumber(),
+        number: await nextInvoiceNumber(),
         date,
         total,
         status: computeStatus(total, 0, date),
