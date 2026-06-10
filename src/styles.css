@@ -440,7 +440,7 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ───── tooth chart (anatomical odontogram) ───── */
-.tooth-chart-wrap { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.tooth-chart-wrap { display: flex; flex-direction: column; gap: 4px; align-items: center; width: fit-content; margin: 0 auto; }
 .tooth-row { display: flex; justify-content: center; align-items: flex-end; }
 .tooth-row--lower { align-items: flex-start; }
 .tooth {

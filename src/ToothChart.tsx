@@ -17,9 +17,11 @@ export const CONDITION_META: Record<ToothCondition, { color: string; tint: strin
   extract: { color: "#F21200", tint: "#FFD6D1", label: "Extract" },
 };
 
-// Box the 36×64 glyph viewBox renders into.
-const BOX = { full: { w: 30, h: 54 }, mini: { w: 15, h: 27 } };
-const GAP = { full: 3, mini: 2 };
+// Box the 36×64 glyph viewBox renders into. The full size is tuned so the whole
+// grid (16 teeth + gaps + midline) fits inside the Dental Chart's gray panel with
+// even padding all around — see the width math in NewEntry's chart card.
+const BOX = { full: { w: 27, h: 49 }, mini: { w: 15, h: 27 } };
+const GAP = { full: 2, mini: 2 };
 const SPACER = { full: 12, mini: 6 };
 
 interface ToothProps {
