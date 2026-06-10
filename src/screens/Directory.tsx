@@ -7,12 +7,14 @@ import {
   IconFilter,
   IconSearch,
 } from "../icons";
-import { usePatients } from "../api/hooks";
+import { usePatients, useSavePatient } from "../api/hooks";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { TableRowsSkeleton } from "../components/Skeleton";
+import { PatientFormModal } from "../components/PatientFormModal";
 import type { ApiPatient } from "../api/types";
 
 const PAGE_SIZE = 8;
+const STATUS_LABELS = ["Active", "Follow-up", "Inactive", "Pending"] as const;
 
 type StatusOption = "All Statuses" | "Active" | "Follow-up" | "Inactive" | "Pending";
 type SortKey = "recent" | "name" | "next" | "id";
@@ -73,10 +75,71 @@ function SortFilter({ value, onChange }: { value: SortKey; onChange: (v: SortKey
   );
 }
 
-function PatientRow({ p, onView }: { p: ApiPatient; onView: () => void }) {
+// Quick status editor shown right in the directory row. Clicking the chip opens a
+// small menu; picking a status PUTs the full patient payload (the server's PUT
+// requires the complete body, so we rebuild it from the row) and the list refreshes.
+function StatusChipMenu({ p }: { p: ApiPatient }) {
+  const [open, setOpen] = useState(false);
+  const save = useSavePatient();
+
+  const change = (status: string) => {
+    setOpen(false);
+    if (status === p.status.key) return;
+    save.mutate({
+      id: p.id,
+      data: {
+        name: p.name,
+        phone: p.phone,
+        email: p.email || undefined,
+        age: p.age,
+        gender: p.gender,
+        blood: p.blood,
+        status,
+        risk: p.risk,
+        conditions: p.conditions,
+        allergies: p.allergies,
+        medications: p.medications,
+        address: p.address || "",
+      },
+    });
+  };
+
+  return (
+    <div className="menu-anchor" onClick={(e) => e.stopPropagation()}>
+      <button
+        className={`chip ${p.status.chip}`}
+        style={{ border: 0, cursor: "pointer", opacity: save.isPending ? 0.6 : 1 }}
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        disabled={save.isPending}
+        title="Change status"
+      >
+        {p.status.key} <IconChev size={12} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 4 }} onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div className="menu" style={{ minWidth: 160 }}>
+            {STATUS_LABELS.map((s) => (
+              <div
+                key={s}
+                className="menu-item"
+                onClick={(e) => { e.stopPropagation(); change(s); }}
+                style={{ fontWeight: s === p.status.key ? 700 : 400, color: s === p.status.key ? "var(--navy-900)" : undefined }}
+              >
+                {s}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PatientRow({ p, onView, onEdit }: { p: ApiPatient; onView: () => void; onEdit: () => void }) {
   const initials = p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
   return (
-    <div className="dt-row" style={{ gridTemplateColumns: "2.2fr 1fr 1.2fr 1.7fr 1fr 1fr" }} onClick={onView}>
+    <div className="dt-row" style={{ gridTemplateColumns: "2.2fr 1fr 1.2fr 1.5fr 1fr 1.3fr" }} onClick={onView}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div className="placeholder-stripe" style={{ width: 40, height: 40, display: "grid", placeItems: "center", color: "var(--navy-900)", fontFamily: "var(--font-h)", fontWeight: 700, fontSize: 13 }}>{initials}</div>
         <div>
@@ -96,9 +159,10 @@ function PatientRow({ p, onView }: { p: ApiPatient; onView: () => void }) {
           <span style={{ color: "var(--ink-400)" }}>Not scheduled</span>
         )}
       </div>
-      <div><span className={`chip ${p.status.chip}`}>{p.status.key}</span></div>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="btn btn-soft btn-sm" onClick={(e) => { e.stopPropagation(); onView(); }}>View Details</button>
+      <div><StatusChipMenu p={p} /></div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(); }}>Edit</button>
+        <button className="btn btn-soft btn-sm" onClick={(e) => { e.stopPropagation(); onView(); }}>View</button>
       </div>
     </div>
   );
@@ -138,13 +202,15 @@ function Pagination({ page, setPage, totalPages }: { page: number; setPage: (p: 
 interface DirectoryProps {
   openPatient: (id: string) => void;
   initialQuery?: string;
+  isDoctor: boolean;
 }
 
-export function Directory({ openPatient, initialQuery }: DirectoryProps) {
+export function Directory({ openPatient, initialQuery, isDoctor }: DirectoryProps) {
   const [q, setQ] = useState(initialQuery ?? "");
   const [status, setStatus] = useState<StatusOption>("All Statuses");
   const [sort, setSort] = useState<SortKey>("recent");
   const [page, setPage] = useState(1);
+  const [editing, setEditing] = useState<ApiPatient | null>(null);
 
   // Drive the query off a debounced copy of the search box so each keystroke
   // updates the input instantly but only fires one request once typing pauses.
@@ -195,7 +261,7 @@ export function Directory({ openPatient, initialQuery }: DirectoryProps) {
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <div className="dt-head" style={{ gridTemplateColumns: "2.2fr 1fr 1.2fr 1.7fr 1fr 1fr" }}>
+        <div className="dt-head" style={{ gridTemplateColumns: "2.2fr 1fr 1.2fr 1.5fr 1fr 1.3fr" }}>
           <div className="col">Patient Name</div>
           <div className="col">ID Number</div>
           <div className="col">Last Visit</div>
@@ -204,13 +270,13 @@ export function Directory({ openPatient, initialQuery }: DirectoryProps) {
           <div className="col" style={{ textAlign: "right" }}>Actions</div>
         </div>
         {isLoading ? (
-          <TableRowsSkeleton rows={PAGE_SIZE} cols={6} gridTemplateColumns="2.2fr 1fr 1.2fr 1.7fr 1fr 1fr" />
+          <TableRowsSkeleton rows={PAGE_SIZE} cols={6} gridTemplateColumns="2.2fr 1fr 1.2fr 1.5fr 1fr 1.3fr" />
         ) : isError ? (
           <EmptyState title="Couldn't load patients" sub="Is the API server running?" />
         ) : items.length === 0 ? (
           <EmptyState title="No patients match" sub="Try clearing filters or searching by a different term." />
         ) : (
-          items.map((p) => <PatientRow key={p.id} p={p} onView={() => openPatient(p.id)} />)
+          items.map((p) => <PatientRow key={p.id} p={p} onView={() => openPatient(p.id)} onEdit={() => setEditing(p)} />)
         )}
       </div>
 
@@ -220,6 +286,15 @@ export function Directory({ openPatient, initialQuery }: DirectoryProps) {
         </div>
         <Pagination page={page} setPage={setPage} totalPages={totalPages} />
       </div>
+
+      {editing && (
+        <PatientFormModal
+          patient={editing}
+          isDoctor={isDoctor}
+          onClose={() => setEditing(null)}
+          onSaved={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }

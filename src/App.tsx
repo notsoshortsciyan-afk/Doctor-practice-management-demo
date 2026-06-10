@@ -169,7 +169,7 @@ function Shell() {
 
   let screen: React.ReactNode;
   if (route === "directory") {
-    screen = <Directory openPatient={openPatient} initialQuery={directoryInitialQuery} />;
+    screen = <Directory openPatient={openPatient} initialQuery={directoryInitialQuery} isDoctor={isDoctor} />;
   } else if (route === "detail") {
     screen = <PatientDetail go={go} patientId={selectedPatientId} isDoctor={isDoctor} openInvoice={openInvoice} />;
   } else if (route === "entry" && isDoctor) {

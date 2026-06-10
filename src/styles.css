@@ -512,7 +512,18 @@ body {
 .rx-foot .r .cn { font-weight: 700; margin-top: 2px; }
 
 /* Sticky live-preview column on the New Entry screen (screen only). */
-.rx-preview-sticky { position: sticky; top: 92px; }
+.entry-form-pane {
+  /* Two-pane scroll: only the form column scrolls; the page frame + preview stay fixed.
+     Offset ≈ nav 72 + page pad 32 + crumbs/header ~110 + grid mt 32 + bottom gap. Tunable. */
+  max-height: calc(100vh - 270px);
+  overflow-y: auto;
+  padding-right: 12px;
+}
+.rx-preview-sticky {
+  position: sticky; top: 0;
+  max-height: calc(100vh - 270px);
+  overflow-y: auto; /* a tall Rx scrolls within its own pane, not the page */
+}
 /* The placeholder-free copy that exists solely to be printed from New Entry. */
 .rx-print-only { display: none; }
 

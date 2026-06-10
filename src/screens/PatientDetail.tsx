@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  IconArrowRight,
   IconBadge,
   IconBeaker,
   IconCalendar,
@@ -9,7 +8,6 @@ import {
   IconDroplet,
   IconFile,
   IconHome,
-  IconImage,
   IconMail,
   IconPhone,
   IconPlus,
@@ -339,20 +337,6 @@ export function PatientDetail({ go, patientId, isDoctor, openInvoice }: PatientD
           <div className="card card-pad">
             <div className="h2" style={{ marginBottom: 16 }}>Billing &amp; Payments</div>
             <PatientBillingHistory patientId={p.id} onOpenInvoice={openInvoice} />
-          </div>
-
-          <div className="card card-pad">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div className="h2">X-Rays & Photos</div>
-              <button className="btn btn-ghost btn-sm">View Gallery <IconArrowRight size={14} /></button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {(data.documents.length ? data.documents.slice(0, 6) : [1, 2, 3, 4, 5, 6]).map((_, i) => (
-                <div key={i} className="placeholder-stripe" style={{ aspectRatio: "1 / 1", borderRadius: 8, display: "grid", placeItems: "center", color: "var(--ink-500)" }}>
-                  <IconImage size={20} />
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </div>

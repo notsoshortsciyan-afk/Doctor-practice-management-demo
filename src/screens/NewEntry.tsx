@@ -329,7 +329,7 @@ export function NewEntry({ go, showToast }: NewEntryProps) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 32, alignItems: "start" }}>
-        <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="no-print entry-form-pane" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div className="card card-pad">
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, color: "var(--navy-900)" }}>
               <IconUser size={20} />
