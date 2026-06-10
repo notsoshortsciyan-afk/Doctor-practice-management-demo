@@ -6,6 +6,7 @@ import { PatientBillingHistory } from "../components/PatientBillingHistory";
 import { SkeletonText, TableRowsSkeleton } from "../components/Skeleton";
 import type { ApiInvoice, InvoiceStatus } from "../api/types";
 import { money } from "../lib/money";
+import { ymd } from "../lib/dateRange";
 
 const STATUS_CHIP: Record<InvoiceStatus, string> = {
   Paid: "chip-confirmed",
@@ -125,7 +126,14 @@ export function Billing({
   const [drawerPatient, setDrawerPatient] = useState<{ id: string; name: string } | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrolledRef = useRef(false);
-  const stats = useStats();
+  // Summary card shows a rolling 7-day revenue window (sum of payments).
+  const last7 = useMemo(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 6);
+    return { from: ymd(from), to: ymd(to) };
+  }, []);
+  const stats = useStats(last7);
   // Fetch every invoice once (stable cache key) and switch filter tabs in memory
   // so clicking a status is instant instead of a fresh server round-trip each time.
   const { data, isLoading } = useInvoices({});
@@ -158,7 +166,7 @@ export function Billing({
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24, marginTop: 28 }}>
-        <SummaryCard label="Revenue (7 days)" value={stats.data ? money(stats.data.weeklyRevenue) : "—"} loading={stats.isPending} />
+        <SummaryCard label="Revenue (7 days)" value={stats.data ? money(stats.data.periodRevenue) : "—"} loading={stats.isPending} />
         <SummaryCard label="Outstanding" value={stats.data ? money(stats.data.outstanding) : "—"} accent loading={stats.isPending} />
         <SummaryCard label="Invoices" value={String(list.length)} loading={isLoading} />
       </div>

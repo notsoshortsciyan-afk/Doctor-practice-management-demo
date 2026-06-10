@@ -14,14 +14,16 @@ import {
 } from "../icons";
 import { useAppointments, useStats, useUpdateAppointment } from "../api/hooks";
 import { KebabMenu } from "../components/KebabMenu";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { AppointmentRowSkeleton, StatCardSkeleton } from "../components/Skeleton";
 import { useAuth } from "../auth/AuthContext";
 import { money } from "../lib/money";
+import { ymd, presetRange, rangeSubLabel, type RangeValue } from "../lib/dateRange";
 import type { ApiAppointment, AppointmentStatus } from "../api/types";
 import type { Route } from "../types";
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function fmtDelta(pct: number | null | undefined): string | undefined {
+  return pct == null ? undefined : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
 }
 
 function StatCard({ icon, label, value, delta, sub }: { icon: ReactNode; label: string; value: string | number; delta?: string; sub?: string }) {
@@ -75,7 +77,9 @@ interface DashboardProps {
 
 export function Dashboard({ go, isDoctor }: DashboardProps) {
   const { user } = useAuth();
-  const stats = useStats();
+  // Period filter — scopes the patients / revenue / appointments cards only.
+  const [range, setRange] = useState<RangeValue>(() => ({ preset: "thisMonth", ...presetRange("thisMonth") }));
+  const stats = useStats({ from: range.from, to: range.to });
   // Use the client's local (clinic) date so "today" matches the receptionist's day.
   const appts = useAppointments(
     { date: ymd(new Date()) },
@@ -90,10 +94,8 @@ export function Dashboard({ go, isDoctor }: DashboardProps) {
   const pendingToday = list.filter((a) => a.status === "pending").length;
   const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
-  const revenueDelta =
-    stats.data?.revenueDeltaPct != null
-      ? `${stats.data.revenueDeltaPct >= 0 ? "+" : ""}${stats.data.revenueDeltaPct.toFixed(1)}%`
-      : undefined;
+  const isAllTime = range.preset === "allTime";
+  const periodSub = rangeSubLabel(range);
 
   return (
     <div className="page" style={{ display: "flex", flexDirection: "column", gap: 32 }} data-screen-label="01 Dashboard">
@@ -111,28 +113,55 @@ export function Dashboard({ go, isDoctor }: DashboardProps) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24 }}>
-        {stats.isPending ? (
-          <>
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </>
-        ) : (
-          <>
-            <StatCard icon={<IconUsers size={22} />} label="Total Patients" value={stats.data ? stats.data.totalPatients.toLocaleString() : "—"} sub="Registered in the practice" />
-            <StatCard icon={<IconCalendar size={22} />} label="Today's Bookings" value={active.length} sub={`${stats.data?.pendingToday ?? 0} pending`} />
-            <StatCard icon={<IconCash size={22} />} label="Weekly Revenue" value={stats.data ? money(stats.data.weeklyRevenue) : "—"} delta={revenueDelta} sub={revenueDelta ? "vs. last week" : "This week"} />
-            <StatCard icon={<IconBeaker size={22} />} label="Outstanding Balance" value={stats.data ? money(stats.data.outstanding) : "—"} sub="Unpaid & partial invoices" />
-          </>
-        )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <h2 className="h2">Overview</h2>
+          <DateRangePicker value={range} onChange={setRange} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24 }}>
+          {stats.isPending ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <StatCard
+                icon={<IconUsers size={22} />}
+                label={isAllTime ? "Total Patients" : "New Patients"}
+                value={stats.data ? stats.data.periodPatients.toLocaleString() : "—"}
+                delta={fmtDelta(stats.data?.periodPatientsDeltaPct)}
+                sub={isAllTime ? "Registered in the practice" : periodSub}
+              />
+              <StatCard
+                icon={<IconCash size={22} />}
+                label="Revenue"
+                value={stats.data ? money(stats.data.periodRevenue) : "—"}
+                delta={fmtDelta(stats.data?.periodRevenueDeltaPct)}
+                sub={stats.data?.periodRevenueDeltaPct != null ? "vs. previous period" : periodSub}
+              />
+              <StatCard
+                icon={<IconCalendar size={22} />}
+                label="Appointments"
+                value={stats.data ? stats.data.periodAppointments.toLocaleString() : "—"}
+                delta={fmtDelta(stats.data?.periodAppointmentsDeltaPct)}
+                sub={isAllTime ? "All bookings" : `Booked · ${periodSub}`}
+              />
+              <StatCard icon={<IconBeaker size={22} />} label="Outstanding Balance" value={stats.data ? money(stats.data.outstanding) : "—"} sub="Unpaid & partial invoices" />
+            </>
+          )}
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, alignItems: "start" }}>
         <div className="card" style={{ overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--border-soft)" }}>
-            <h2 className="h2">Today's Appointments</h2>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+              <h2 className="h2">Today's Appointments</h2>
+              <span style={{ color: "var(--ink-500)", fontSize: 13 }}>{active.length} booked · {pendingToday} pending</span>
+            </div>
             <button className="btn btn-ghost btn-sm" onClick={() => go("schedule")}>View Schedule <IconArrowRight size={14} /></button>
           </div>
           <div>

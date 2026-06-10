@@ -174,11 +174,17 @@ export interface ApiInvoice {
 }
 
 export interface ApiStats {
+  // Snapshots — not affected by the dashboard date range.
   totalPatients: number;
   todaysBookings: number;
   pendingToday: number;
-  weeklyRevenue: number;
-  revenueDeltaPct: number | null;
   outstanding: number;
   chairUtilization: number;
+  // Period metrics — driven by the selected from/to range.
+  periodPatients: number;
+  periodPatientsDeltaPct: number | null;
+  periodRevenue: number;
+  periodRevenueDeltaPct: number | null;
+  periodAppointments: number;
+  periodAppointmentsDeltaPct: number | null;
 }

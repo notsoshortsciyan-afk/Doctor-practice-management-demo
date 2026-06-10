@@ -21,15 +21,13 @@ import {
 } from "../api/hooks";
 import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { APPOINTMENT_SLOTS } from "../data";
+import { ymd } from "../lib/dateRange";
 import type { ApiAppointment, AppointmentSource, AppointmentStatus } from "../api/types";
 
 // Bookings are created on the public clinic site, not in the dashboard. "New
 // Appointment" opens it in a new tab (the dashboard stays put behind it).
 const APPOINTMENT_BOOKING_URL = "https://drashraf.vercel.app/appointment";
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

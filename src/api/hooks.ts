@@ -20,8 +20,17 @@ import type {
 } from "./types";
 
 // ---------- Stats ----------
-export function useStats() {
-  return useQuery({ queryKey: ["stats"], queryFn: () => apiFetch<ApiStats>("/stats") });
+export interface StatsQuery {
+  from?: string; // YYYY-MM-DD — scopes the period cards (patients / revenue / appointments)
+  to?: string;
+}
+
+export function useStats(params: StatsQuery = {}) {
+  return useQuery({
+    queryKey: ["stats", params],
+    queryFn: () => apiFetch<ApiStats>("/stats", { params: params as ParamMap }),
+    placeholderData: keepPreviousData,
+  });
 }
 
 // ---------- Prefetch ----------
