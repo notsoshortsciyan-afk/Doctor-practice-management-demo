@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   useSettings,
   useUpdateSettings,
+  useClinicSettings,
+  useUpdateClinicSettings,
   useUsers,
   useCreateUser,
   useUpdateUser,
@@ -14,7 +16,7 @@ import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { ApiError } from "../api/client";
 import type { ApiSettings, ApiUser } from "../api/types";
 
-type Tab = "appearance" | "account" | "staff";
+type Tab = "appearance" | "account" | "scheduling" | "staff";
 
 function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
@@ -274,12 +276,57 @@ function Staff() {
   );
 }
 
+function Scheduling({ showToast }: { showToast: (m: string) => void }) {
+  const { data, isLoading } = useClinicSettings();
+  const update = useUpdateClinicSettings();
+  const [value, setValue] = useState<number | null>(null);
+  // Local edit overrides the loaded value once the user types.
+  const current = value ?? data?.slotFullAt ?? 5;
+
+  const save = async () => {
+    try {
+      await update.mutateAsync({ slotFullAt: current });
+      showToast("Scheduling settings saved.");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not save scheduling settings.");
+    }
+  };
+
+  return (
+    <div className="card card-pad" style={{ maxWidth: 560 }}>
+      <h2 className="h2" style={{ marginBottom: 4 }}>Scheduling</h2>
+      <div style={{ color: "var(--ink-500)", fontSize: 14 }}>Clinic-wide — applies to everyone's Schedule.</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "16px 0", marginTop: 12, borderTop: "1px solid var(--border-soft)" }}>
+        <div>
+          <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--navy-900)" }}>Flag a slot as "full" at</div>
+          <div style={{ color: "var(--ink-500)", fontSize: 13, marginTop: 2 }}>
+            When a time slot reaches this many bookings, the Schedule highlights it so staff can lock it. Nothing locks automatically.
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <input
+            className="input"
+            type="number"
+            min={1}
+            max={50}
+            style={{ width: 84 }}
+            value={current}
+            disabled={isLoading}
+            onChange={(e) => setValue(Math.max(1, Math.min(50, Math.round(Number(e.target.value) || 1))))}
+          />
+          <button className="btn btn-primary" onClick={save} disabled={update.isPending || isLoading}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Settings({ isDoctor, showToast }: { isDoctor: boolean; showToast: (m: string) => void }) {
   const [tab, setTab] = useState<Tab>("appearance");
   const tabs: { key: Tab; label: string }[] = [
     { key: "appearance", label: "Appearance" },
     { key: "account", label: "Account" },
-    ...(isDoctor ? [{ key: "staff" as Tab, label: "Staff" }] : []),
+    ...(isDoctor ? [{ key: "scheduling" as Tab, label: "Scheduling" }, { key: "staff" as Tab, label: "Staff" }] : []),
   ];
 
   return (
@@ -302,6 +349,7 @@ export function Settings({ isDoctor, showToast }: { isDoctor: boolean; showToast
 
       {tab === "appearance" && <Appearance />}
       {tab === "account" && <Account showToast={showToast} />}
+      {tab === "scheduling" && isDoctor && <Scheduling showToast={showToast} />}
       {tab === "staff" && isDoctor && <Staff />}
     </div>
   );

@@ -18,16 +18,23 @@ router.get(
     const twoWeeksAgo = new Date(now);
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-    const [totalPatients, todaysAppts, pendingToday, paymentsThisWeek, paymentsPrevWeek, outstandingRows] =
+    const [totalPatients, todaysAppts, pendingToday, inUseSlots, paymentsThisWeek, paymentsPrevWeek, outstandingRows] =
       await Promise.all([
         prisma.patient.count(),
-        // Exclude locks (source='lock') — a locked slot is not a booking and must
-        // not inflate "Today's Bookings" or chair utilization (derived below).
+        // Exclude locks (source='lock') — a locked slot is not a booking. Bookings
+        // can stack on a slot, so this is a raw count (may exceed slot capacity).
         prisma.appointment.count({
           where: { appointmentDate: today, status: { not: "cancelled" }, source: { not: "lock" } },
         }),
         prisma.appointment.count({
           where: { appointmentDate: today, status: "pending", source: { not: "lock" } },
+        }),
+        // Chair utilization = how many of the day's fixed slots are in use (have a
+        // booking OR a lock), so overbooking one slot can't push it past 100%.
+        prisma.appointment.findMany({
+          where: { appointmentDate: today, status: { not: "cancelled" } },
+          select: { appointmentTime: true },
+          distinct: ["appointmentTime"],
         }),
         prisma.payment.aggregate({ _sum: { amount: true }, where: { date: { gte: weekAgo } } }),
         prisma.payment.aggregate({
@@ -50,7 +57,7 @@ router.get(
 
     const outstanding = outstandingRows[0]?.outstanding ?? 0;
 
-    const utilization = Math.min(100, Math.round((todaysAppts / DAILY_CAPACITY) * 100));
+    const utilization = Math.min(100, Math.round((inUseSlots.length / DAILY_CAPACITY) * 100));
 
     res.json({
       totalPatients,

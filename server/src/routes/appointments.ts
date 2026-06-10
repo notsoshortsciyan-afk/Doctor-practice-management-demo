@@ -79,31 +79,33 @@ router.get(
 );
 
 // GET /api/appointments/availability?date=YYYY-MM-DD
-// For a day, which of the fixed slots are taken (any non-cancelled booking).
+// Per slot for the day: how many bookings it holds (bookingCount) and whether a
+// staff lock reserves it (locked/lockId). Bookings no longer reserve a slot —
+// only a lock does — so a slot can carry many bookings yet still be bookable.
 router.get(
   "/availability",
   wrap(async (req, res) => {
     const date = typeof req.query.date === "string" ? req.query.date : "";
     if (!isYmd(date)) throw new HttpError(400, "A valid ?date=YYYY-MM-DD is required.");
 
-    // One row per active slot for the day (uniq_active_slot guarantees at most
-    // one). A lock (source='lock') and a real booking are mutually exclusive.
+    // All non-cancelled rows for the day. Bookings can stack on a slot; at most
+    // one lock per slot (uniq_active_lock). Tally booking counts; track lock ids.
     const rows = await prisma.appointment.findMany({
       where: { appointmentDate: dateOnlyUTC(date), status: { not: "cancelled" } },
       select: { id: true, appointmentTime: true, source: true },
     });
-    const bookedSet = new Set<string>();
+    const countByTime = new Map<string, number>();
     const lockIdByTime = new Map<string, bigint>();
     for (const r of rows) {
       if (r.source === LOCK_SOURCE) lockIdByTime.set(r.appointmentTime, r.id);
-      else bookedSet.add(r.appointmentTime);
+      else countByTime.set(r.appointmentTime, (countByTime.get(r.appointmentTime) ?? 0) + 1);
     }
 
     res.json({
       date,
       slots: SLOTS.map((time) => ({
         time,
-        booked: bookedSet.has(time),
+        bookingCount: countByTime.get(time) ?? 0,
         locked: lockIdByTime.has(time),
         lockId: lockIdByTime.get(time)?.toString() ?? null,
       })),

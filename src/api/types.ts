@@ -35,6 +35,11 @@ export interface ApiSettings {
   showSideCards: boolean;
 }
 
+// Clinic-wide (not per-user) settings.
+export interface ApiClinicSettings {
+  slotFullAt: number; // booking count at which the Schedule grid flags a slot "full"
+}
+
 export interface ApiPatient {
   id: string;
   code: string;
@@ -83,9 +88,9 @@ export interface ApiAppointment {
 
 export interface ApiSlotAvailability {
   date: string; // "YYYY-MM-DD"
-  // booked = a real (non-cancelled) patient booking holds the slot; locked = a
-  // staff lock holds it (lockId is its row id, for unlocking). Mutually exclusive.
-  slots: { time: string; booked: boolean; locked: boolean; lockId: string | null }[];
+  // bookingCount = how many non-cancelled patient bookings the slot holds (they no
+  // longer block it); locked = a staff lock reserves it (lockId = its row id, to unlock).
+  slots: { time: string; bookingCount: number; locked: boolean; lockId: string | null }[];
 }
 
 export interface ApiMedicine {

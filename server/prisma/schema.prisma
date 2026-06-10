@@ -69,6 +69,15 @@ model UserSettings {
   showSideCards Boolean @default(true)
 }
 
+// Clinic-wide (not per-user) settings — a single row keyed by the constant id
+// "singleton". slotFullAt is the booking count at which the Schedule grid flags
+// a slot as "full" (a manual nudge to lock it; nothing auto-locks).
+model ClinicSettings {
+  id         String   @id @default("singleton")
+  slotFullAt Int      @default(5)
+  updatedAt  DateTime @updatedAt
+}
+
 model Patient {
   id          String        @id @default(cuid())
   code        String        @unique // human-facing "DC-#####"

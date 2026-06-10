@@ -8,6 +8,7 @@ import {
 import { apiFetch, type ParamMap } from "./client";
 import type {
   ApiAppointment,
+  ApiClinicSettings,
   ApiInvoice,
   ApiPatientBundle,
   ApiPrescription,
@@ -356,6 +357,24 @@ export function useUpdateSettings() {
     mutationFn: (data: Partial<ApiSettings>) =>
       apiFetch<ApiSettings>("/settings", { method: "PUT", body: data }),
     onSuccess: (data) => qc.setQueryData(["settings"], data),
+  });
+}
+
+// Clinic-wide settings (e.g. the Schedule "slot full" threshold). Readable by
+// both roles; only the doctor can update (server enforces the role).
+export function useClinicSettings() {
+  return useQuery({
+    queryKey: ["clinic-settings"],
+    queryFn: () => apiFetch<ApiClinicSettings>("/settings/clinic"),
+  });
+}
+
+export function useUpdateClinicSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ApiClinicSettings) =>
+      apiFetch<ApiClinicSettings>("/settings/clinic", { method: "PUT", body: data }),
+    onSuccess: (data) => qc.setQueryData(["clinic-settings"], data),
   });
 }
 

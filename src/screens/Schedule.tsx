@@ -17,6 +17,7 @@ import {
   useSlotAvailability,
   useLockSlot,
   useUnlockSlot,
+  useClinicSettings,
 } from "../api/hooks";
 import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { APPOINTMENT_SLOTS } from "../data";
@@ -57,9 +58,12 @@ function SourceBadge({ source }: { source: AppointmentSource }) {
 }
 
 // ── Slot locking ──────────────────────────────────────────────
-// A lock reserves a slot in the shared appointments table so it can't be booked
-// on the website or at the front desk. Booked slots can't be locked; locked
-// slots can be unlocked. Polls so locks/bookings from elsewhere appear live.
+// Bookings no longer reserve a slot — patients can keep booking the same time.
+// This grid shows each slot's live booking count and flags it "full" past the
+// clinic threshold; staff lock a slot to actually stop new bookings (on the
+// website too). Polls so counts/locks from elsewhere appear without a refresh.
+type AvailSlot = { time: string; bookingCount: number; locked: boolean; lockId: string | null };
+
 function LockLegend({ swatch, border, label }: { swatch: string; border: string; label: string }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -75,16 +79,18 @@ function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
+  const clinic = useClinicSettings();
+  const fullAt = clinic.data?.slotFullAt ?? 5;
   const lock = useLockSlot();
   const unlock = useUnlockSlot();
   const [busyTime, setBusyTime] = useState<string | null>(null);
 
-  const slots =
+  const slots: AvailSlot[] =
     availability.data?.slots ??
-    APPOINTMENT_SLOTS.map((time) => ({ time, booked: false, locked: false, lockId: null as string | null }));
+    APPOINTMENT_SLOTS.map((time) => ({ time, bookingCount: 0, locked: false, lockId: null }));
 
-  const toggle = (s: { time: string; booked: boolean; locked: boolean; lockId: string | null }) => {
-    if (s.booked || busyTime) return; // booked slots aren't lockable; one action at a time
+  const toggle = (s: AvailSlot) => {
+    if (busyTime) return; // one action at a time
     setBusyTime(s.time);
     const done = () => setBusyTime(null);
     if (s.locked && s.lockId) {
@@ -112,30 +118,30 @@ function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string
           <IconLock size={17} />
         </div>
         <div>
-          <h2 className="h2" style={{ fontSize: 16 }}>Lock Time Slots</h2>
+          <h2 className="h2" style={{ fontSize: 16 }}>Time Slots</h2>
           <div style={{ color: "var(--ink-500)", fontSize: 13 }}>
-            Locked slots are blocked from booking on the website until you unlock them.
+            Bookings don't block a slot — lock one to stop new website bookings. Flagged "full" at {fullAt}.
           </div>
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginTop: 16 }}>
         {slots.map((s) => {
-          const state = s.booked ? "booked" : s.locked ? "locked" : "open";
+          const state = s.locked ? "locked" : s.bookingCount >= fullAt ? "full" : "open";
           const busy = busyTime === s.time;
+          const sub =
+            state === "locked"
+              ? `Locked${s.bookingCount > 0 ? ` · ${s.bookingCount}` : ""}`
+              : s.bookingCount === 0
+                ? "No bookings"
+                : `${s.bookingCount} booked${state === "full" ? " · full" : ""}`;
           return (
             <button
               key={s.time}
               type="button"
-              disabled={s.booked || (busyTime !== null && !busy)}
+              disabled={busyTime !== null && !busy}
               onClick={() => toggle(s)}
-              title={
-                state === "booked"
-                  ? "Booked — can't be locked"
-                  : state === "locked"
-                    ? "Locked — click to unlock"
-                    : "Open — click to lock"
-              }
+              title={s.locked ? "Locked — click to unlock" : `${s.bookingCount} booking(s) — click to lock`}
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -148,15 +154,15 @@ function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string
                 fontFamily: "var(--font-h)",
                 fontWeight: 700,
                 fontSize: 13,
-                border: `1px solid ${state === "locked" ? "var(--navy-900)" : "var(--border-soft)"}`,
-                background: state === "locked" ? "var(--navy-900)" : state === "booked" ? "var(--bg-soft)" : "#fff",
-                color: state === "locked" ? "#fff" : state === "booked" ? "var(--ink-300)" : "var(--navy-900)",
-                cursor: state === "booked" ? "not-allowed" : "pointer",
+                border: `1px solid ${state === "locked" ? "var(--navy-900)" : state === "full" ? "var(--warn-ink)" : "var(--border-soft)"}`,
+                background: state === "locked" ? "var(--navy-900)" : state === "full" ? "var(--warn-bg)" : "#fff",
+                color: state === "locked" ? "#fff" : state === "full" ? "var(--warn-ink)" : "var(--navy-900)",
+                cursor: "pointer",
                 opacity: busy ? 0.6 : 1,
                 transition: "border-color .15s, background .15s",
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: state === "booked" ? "line-through" : "none" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 {state === "locked" && <IconLock size={13} />}
                 {s.time}
               </span>
@@ -164,12 +170,12 @@ function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string
                 style={{
                   fontSize: 10,
                   fontWeight: 700,
-                  letterSpacing: ".06em",
+                  letterSpacing: ".04em",
                   textTransform: "uppercase",
-                  color: state === "locked" ? "rgba(255,255,255,.75)" : state === "booked" ? "var(--ink-300)" : "var(--ink-500)",
+                  color: state === "locked" ? "rgba(255,255,255,.75)" : state === "full" ? "var(--warn-ink)" : "var(--ink-500)",
                 }}
               >
-                {state === "booked" ? "Booked" : state === "locked" ? "Locked" : "Open"}
+                {sub}
               </span>
             </button>
           );
@@ -178,8 +184,8 @@ function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string
 
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 14, fontSize: 12, color: "var(--ink-500)" }}>
         <LockLegend swatch="#fff" border="var(--border-soft)" label="Open" />
+        <LockLegend swatch="var(--warn-bg)" border="var(--warn-ink)" label={`Full (${fullAt}+)`} />
         <LockLegend swatch="var(--navy-900)" border="var(--navy-900)" label="Locked" />
-        <LockLegend swatch="var(--bg-soft)" border="var(--border-soft)" label="Booked" />
         {availability.isLoading && <span style={{ marginLeft: "auto" }}>Checking availability…</span>}
       </div>
     </div>
