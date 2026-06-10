@@ -4,21 +4,27 @@ import {
   IconCheck,
   IconChevL,
   IconChevR,
+  IconExternalLink,
+  IconLock,
   IconPlus,
   IconX,
 } from "../icons";
 import { KebabMenu } from "../components/KebabMenu";
 import {
   useAppointments,
-  useCreateAppointment,
   useUpdateAppointment,
   useDeleteAppointment,
   useSlotAvailability,
+  useLockSlot,
+  useUnlockSlot,
 } from "../api/hooks";
-import { Modal } from "../components/Modal";
 import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { APPOINTMENT_SLOTS } from "../data";
 import type { ApiAppointment, AppointmentSource, AppointmentStatus } from "../api/types";
+
+// Bookings are created on the public clinic site, not in the dashboard. "New
+// Appointment" opens it in a new tab (the dashboard stays put behind it).
+const APPOINTMENT_BOOKING_URL = "https://drashraf.vercel.app/appointment";
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -50,140 +56,133 @@ function SourceBadge({ source }: { source: AppointmentSource }) {
   );
 }
 
-function CreateModal({
-  initialDate,
-  onClose,
-  showToast,
-}: {
-  initialDate: Date;
-  onClose: () => void;
-  showToast: (m: string) => void;
-}) {
-  const create = useCreateAppointment();
-  const [fullName, setFullName] = useState("");
-  const [contactNumber, setContactNumber] = useState("");
-  const [email, setEmail] = useState("");
-  const [reason, setReason] = useState("");
-  const [date, setDate] = useState(ymd(initialDate));
-  const [slot, setSlot] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+// ── Slot locking ──────────────────────────────────────────────
+// A lock reserves a slot in the shared appointments table so it can't be booked
+// on the website or at the front desk. Booked slots can't be locked; locked
+// slots can be unlocked. Polls so locks/bookings from elsewhere appear live.
+function LockLegend({ swatch, border, label }: { swatch: string; border: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span style={{ width: 12, height: 12, borderRadius: 4, background: swatch, border: `1px solid ${border}` }} />
+      {label}
+    </span>
+  );
+}
 
-  // This component only mounts while the create modal is open, so the 5s poll is
-  // naturally scoped to when the picker is on screen.
+function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string) => void }) {
   const availability = useSlotAvailability(date, {
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
-  const slots = availability.data?.slots ?? APPOINTMENT_SLOTS.map((time) => ({ time, booked: false }));
+  const lock = useLockSlot();
+  const unlock = useUnlockSlot();
+  const [busyTime, setBusyTime] = useState<string | null>(null);
 
-  const submit = async () => {
-    setError(null);
-    if (!fullName.trim() || !contactNumber.trim()) {
-      setError("Patient name and contact number are required.");
-      return;
-    }
-    if (!slot) {
-      setError("Pick an available time slot.");
-      return;
-    }
-    try {
-      await create.mutateAsync({
-        fullName: fullName.trim(),
-        contactNumber: contactNumber.trim(),
-        email: email.trim() || undefined,
-        reason: reason.trim() || undefined,
-        appointmentDate: date,
-        appointmentTime: slot,
+  const slots =
+    availability.data?.slots ??
+    APPOINTMENT_SLOTS.map((time) => ({ time, booked: false, locked: false, lockId: null as string | null }));
+
+  const toggle = (s: { time: string; booked: boolean; locked: boolean; lockId: string | null }) => {
+    if (s.booked || busyTime) return; // booked slots aren't lockable; one action at a time
+    setBusyTime(s.time);
+    const done = () => setBusyTime(null);
+    if (s.locked && s.lockId) {
+      unlock.mutate(s.lockId, {
+        onSuccess: () => showToast("Slot unlocked — open for booking again."),
+        onError: (e) => showToast(e instanceof Error ? e.message : "Could not unlock the slot."),
+        onSettled: done,
       });
-      showToast("Appointment added.");
-      onClose();
-    } catch (e) {
-      // Surfaces the server's message, including the 409 "slot just taken".
-      setError(e instanceof Error ? e.message : "Could not save the appointment.");
+    } else {
+      lock.mutate(
+        { date, time: s.time },
+        {
+          onSuccess: () => showToast("Slot locked — it can't be booked on the website."),
+          onError: (e) => showToast(e instanceof Error ? e.message : "Could not lock the slot."),
+          onSettled: done,
+        },
+      );
     }
   };
 
   return (
-    <Modal
-      title="New Appointment"
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={submit} disabled={create.isPending}>Save Appointment</button>
-        </>
-      }
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div className="field">
-          <label className="label">Patient Name</label>
-          <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" />
+    <div className="card" style={{ marginTop: 16, padding: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 8, background: "var(--bg-soft-3)", display: "grid", placeItems: "center", color: "var(--navy-900)" }}>
+          <IconLock size={17} />
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div className="field">
-            <label className="label">Contact Number</label>
-            <input className="input" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="01XXXXXXXXX" />
-          </div>
-          <div className="field">
-            <label className="label">Email <span style={{ color: "var(--ink-400)", fontWeight: 400 }}>(optional)</span></label>
-            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
+        <div>
+          <h2 className="h2" style={{ fontSize: 16 }}>Lock Time Slots</h2>
+          <div style={{ color: "var(--ink-500)", fontSize: 13 }}>
+            Locked slots are blocked from booking on the website until you unlock them.
           </div>
         </div>
-        <div className="field">
-          <label className="label">Reason <span style={{ color: "var(--ink-400)", fontWeight: 400 }}>(optional)</span></label>
-          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Toothache, Cleaning" />
-        </div>
-        <div className="field">
-          <label className="label">Date</label>
-          <input
-            className="input"
-            type="date"
-            value={date}
-            onChange={(e) => {
-              setDate(e.target.value);
-              setSlot(null); // availability changes with the date
-            }}
-          />
-        </div>
-        <div className="field">
-          <label className="label">Time Slot</label>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-            {slots.map(({ time, booked }) => {
-              const selected = slot === time;
-              return (
-                <button
-                  key={time}
-                  type="button"
-                  disabled={booked}
-                  onClick={() => setSlot(time)}
-                  style={{
-                    height: 40,
-                    borderRadius: 8,
-                    fontFamily: "var(--font-h)",
-                    fontWeight: 700,
-                    fontSize: 13,
-                    border: `1px solid ${selected ? "var(--navy-900)" : "var(--border-soft)"}`,
-                    background: selected ? "var(--navy-900)" : booked ? "var(--bg-soft)" : "#fff",
-                    color: selected ? "#fff" : booked ? "var(--ink-300)" : "var(--navy-900)",
-                    textDecoration: booked ? "line-through" : "none",
-                    cursor: booked ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {time}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 6 }}>
-            {availability.isLoading ? "Checking availability…" : "Greyed-out slots are already booked."}
-          </div>
-        </div>
-        {error && (
-          <div style={{ background: "var(--danger-bg)", color: "var(--danger-ink)", borderRadius: 8, padding: "10px 12px", fontSize: 13 }}>{error}</div>
-        )}
       </div>
-    </Modal>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginTop: 16 }}>
+        {slots.map((s) => {
+          const state = s.booked ? "booked" : s.locked ? "locked" : "open";
+          const busy = busyTime === s.time;
+          return (
+            <button
+              key={s.time}
+              type="button"
+              disabled={s.booked || (busyTime !== null && !busy)}
+              onClick={() => toggle(s)}
+              title={
+                state === "booked"
+                  ? "Booked — can't be locked"
+                  : state === "locked"
+                    ? "Locked — click to unlock"
+                    : "Open — click to lock"
+              }
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 3,
+                height: 58,
+                borderRadius: 10,
+                padding: "6px 4px",
+                fontFamily: "var(--font-h)",
+                fontWeight: 700,
+                fontSize: 13,
+                border: `1px solid ${state === "locked" ? "var(--navy-900)" : "var(--border-soft)"}`,
+                background: state === "locked" ? "var(--navy-900)" : state === "booked" ? "var(--bg-soft)" : "#fff",
+                color: state === "locked" ? "#fff" : state === "booked" ? "var(--ink-300)" : "var(--navy-900)",
+                cursor: state === "booked" ? "not-allowed" : "pointer",
+                opacity: busy ? 0.6 : 1,
+                transition: "border-color .15s, background .15s",
+              }}
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: state === "booked" ? "line-through" : "none" }}>
+                {state === "locked" && <IconLock size={13} />}
+                {s.time}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: ".06em",
+                  textTransform: "uppercase",
+                  color: state === "locked" ? "rgba(255,255,255,.75)" : state === "booked" ? "var(--ink-300)" : "var(--ink-500)",
+                }}
+              >
+                {state === "booked" ? "Booked" : state === "locked" ? "Locked" : "Open"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 14, fontSize: 12, color: "var(--ink-500)" }}>
+        <LockLegend swatch="#fff" border="var(--border-soft)" label="Open" />
+        <LockLegend swatch="var(--navy-900)" border="var(--navy-900)" label="Locked" />
+        <LockLegend swatch="var(--bg-soft)" border="var(--border-soft)" label="Booked" />
+        {availability.isLoading && <span style={{ marginLeft: "auto" }}>Checking availability…</span>}
+      </div>
+    </div>
   );
 }
 
@@ -268,7 +267,6 @@ function ApptCardSkeleton() {
 export function Schedule({ showToast }: { showToast: (m: string) => void }) {
   const [date, setDate] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [status, setStatus] = useState("");
-  const [creating, setCreating] = useState(false);
   const updateAppt = useUpdateAppointment();
   const deleteAppt = useDeleteAppointment();
 
@@ -296,7 +294,13 @@ export function Schedule({ showToast }: { showToast: (m: string) => void }) {
           <h1 className="h1">Schedule</h1>
           <div className="lede" style={{ fontSize: 16 }}>Website &amp; front-desk bookings, in one place.</div>
         </div>
-        <button className="btn btn-primary btn-lg" onClick={() => setCreating(true)}><IconPlus size={18} /> New Appointment</button>
+        <button
+          className="btn btn-primary btn-lg"
+          onClick={() => window.open(APPOINTMENT_BOOKING_URL, "_blank", "noopener,noreferrer")}
+          title="Opens the clinic booking site in a new tab"
+        >
+          <IconPlus size={18} /> New Appointment <IconExternalLink size={15} style={{ marginLeft: 2, opacity: 0.85 }} />
+        </button>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 28 }}>
@@ -314,6 +318,8 @@ export function Schedule({ showToast }: { showToast: (m: string) => void }) {
           {list.filter((a) => a.status !== "cancelled").length} active · {list.length} total
         </div>
       </div>
+
+      <SlotLockGrid date={ymd(date)} showToast={showToast} />
 
       <div className="card" style={{ marginTop: 16, overflow: "hidden" }}>
         {isLoading ? (
@@ -340,8 +346,6 @@ export function Schedule({ showToast }: { showToast: (m: string) => void }) {
           ))
         )}
       </div>
-
-      {creating && <CreateModal initialDate={date} onClose={() => setCreating(false)} showToast={showToast} />}
     </div>
   );
 }

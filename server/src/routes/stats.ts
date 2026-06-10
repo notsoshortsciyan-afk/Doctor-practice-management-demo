@@ -21,11 +21,13 @@ router.get(
     const [totalPatients, todaysAppts, pendingToday, paymentsThisWeek, paymentsPrevWeek, outstandingRows] =
       await Promise.all([
         prisma.patient.count(),
+        // Exclude locks (source='lock') — a locked slot is not a booking and must
+        // not inflate "Today's Bookings" or chair utilization (derived below).
         prisma.appointment.count({
-          where: { appointmentDate: today, status: { not: "cancelled" } },
+          where: { appointmentDate: today, status: { not: "cancelled" }, source: { not: "lock" } },
         }),
         prisma.appointment.count({
-          where: { appointmentDate: today, status: "pending" },
+          where: { appointmentDate: today, status: "pending", source: { not: "lock" } },
         }),
         prisma.payment.aggregate({ _sum: { amount: true }, where: { date: { gte: weekAgo } } }),
         prisma.payment.aggregate({

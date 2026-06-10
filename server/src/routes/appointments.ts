@@ -15,6 +15,15 @@ const STATUSES = ["pending", "confirmed", "cancelled"] as const;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const SLOT_TAKEN_MSG = "That slot was just taken — please pick another time.";
 
+// A "lock" is a sentinel row in the shared appointments table (source='lock',
+// status='confirmed') that reserves a slot so neither the website nor the front
+// desk can book it. status='confirmed' (i.e. not 'cancelled') makes BOTH the
+// website's availability filter and the uniq_active_slot index treat it as taken.
+const LOCK_SOURCE = "lock";
+const LOCK_NAME = "Locked";
+const LOCK_CONTACT = "—";
+const LOCK_TAKEN_MSG = "That slot is already booked or locked.";
+
 // The shared partial unique index (uniq_active_slot) enforces one active booking
 // per (date, slot). Prisma maps the Postgres 23505 to P2002; since the index isn't
 // modeled in the schema it can also surface as a raw error, so check both.
@@ -40,7 +49,9 @@ function parseId(raw: string): bigint | null {
 router.get(
   "/",
   wrap(async (req, res) => {
-    const where: Prisma.AppointmentWhereInput = {};
+    // Locks live in this same table (source='lock') but are not bookings — keep
+    // them out of every booking list (Schedule + Dashboard share this endpoint).
+    const where: Prisma.AppointmentWhereInput = { source: { not: LOCK_SOURCE } };
 
     let day: string | null = null;
     if (req.query.today) day = clinicToday();
@@ -75,16 +86,79 @@ router.get(
     const date = typeof req.query.date === "string" ? req.query.date : "";
     if (!isYmd(date)) throw new HttpError(400, "A valid ?date=YYYY-MM-DD is required.");
 
-    const taken = await prisma.appointment.findMany({
+    // One row per active slot for the day (uniq_active_slot guarantees at most
+    // one). A lock (source='lock') and a real booking are mutually exclusive.
+    const rows = await prisma.appointment.findMany({
       where: { appointmentDate: dateOnlyUTC(date), status: { not: "cancelled" } },
-      select: { appointmentTime: true },
+      select: { id: true, appointmentTime: true, source: true },
     });
-    const takenSet = new Set(taken.map((t) => t.appointmentTime));
+    const bookedSet = new Set<string>();
+    const lockIdByTime = new Map<string, bigint>();
+    for (const r of rows) {
+      if (r.source === LOCK_SOURCE) lockIdByTime.set(r.appointmentTime, r.id);
+      else bookedSet.add(r.appointmentTime);
+    }
 
     res.json({
       date,
-      slots: SLOTS.map((time) => ({ time, booked: takenSet.has(time) })),
+      slots: SLOTS.map((time) => ({
+        time,
+        booked: bookedSet.has(time),
+        locked: lockIdByTime.has(time),
+        lockId: lockIdByTime.get(time)?.toString() ?? null,
+      })),
     });
+  }),
+);
+
+// ── Slot locks (shared table, source='lock') ────────────────
+// Lock/unlock a slot by writing/removing a sentinel row. The literal "locks"
+// path segment keeps these from colliding with the single-segment "/:id" routes.
+const lockSchema = z.object({
+  date: z.string().regex(YMD, "Expected YYYY-MM-DD"),
+  time: z.string().refine(isValidSlot, "Not a recognized time slot"),
+});
+
+// POST /api/appointments/locks — reserve a free slot so it can't be booked.
+router.post(
+  "/locks",
+  requireRole("DOCTOR", "RECEPTIONIST"),
+  validate(lockSchema),
+  wrap(async (req, res) => {
+    const body = req.body as z.infer<typeof lockSchema>;
+    try {
+      const lock = await prisma.appointment.create({
+        data: {
+          fullName: LOCK_NAME,
+          contactNumber: LOCK_CONTACT,
+          email: null,
+          reason: "Slot locked by staff",
+          appointmentDate: dateOnlyUTC(body.date),
+          appointmentTime: body.time,
+          status: "confirmed",
+          source: LOCK_SOURCE,
+        },
+      });
+      res.status(201).json({ ok: true, id: lock.id.toString(), time: body.time });
+    } catch (e) {
+      // Slot already held by a booking or another lock (uniq_active_slot).
+      if (isSlotTaken(e)) throw new HttpError(409, LOCK_TAKEN_MSG);
+      throw e;
+    }
+  }),
+);
+
+// DELETE /api/appointments/locks/:id — free a locked slot. The source='lock'
+// guard means this path can never remove a real patient booking.
+router.delete(
+  "/locks/:id",
+  requireRole("DOCTOR", "RECEPTIONIST"),
+  wrap(async (req, res) => {
+    const id = parseId(req.params.id);
+    if (id === null) throw new HttpError(400, "Invalid lock id.");
+    const result = await prisma.appointment.deleteMany({ where: { id, source: LOCK_SOURCE } });
+    if (result.count === 0) throw new HttpError(404, "Lock not found.");
+    res.json({ ok: true });
   }),
 );
 

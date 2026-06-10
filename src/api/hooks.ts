@@ -205,6 +205,34 @@ export function useDeleteAppointment() {
   });
 }
 
+// Refresh every appointment-derived surface after a lock/unlock.
+function invalidateSlots(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ["appointment-availability"] });
+  qc.invalidateQueries({ queryKey: ["appointments"] });
+  qc.invalidateQueries({ queryKey: ["stats"] });
+}
+
+// Lock a free slot so it can't be booked on the website or front desk.
+export function useLockSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { date: string; time: string }) =>
+      apiFetch("/appointments/locks", { method: "POST", body: vars }),
+    onSuccess: () => invalidateSlots(qc),
+    // On a 409 (slot taken/locked a beat earlier), refetch so the grid reflects reality.
+    onError: () => invalidateSlots(qc),
+  });
+}
+
+// Release a locked slot by its lock-row id (from the availability response).
+export function useUnlockSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lockId: string) => apiFetch(`/appointments/locks/${lockId}`, { method: "DELETE" }),
+    onSuccess: () => invalidateSlots(qc),
+  });
+}
+
 // ---------- Prescriptions ----------
 export function usePrescriptions(params: { q?: string; patientId?: string; limit?: number }) {
   return useQuery({

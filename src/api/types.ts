@@ -15,7 +15,8 @@ export interface ApiStatus {
 export type RiskLevel = "LOW" | "MED" | "HIGH";
 export type Gender = "Male" | "Female" | "Other";
 export type AppointmentStatus = "pending" | "confirmed" | "cancelled";
-export type AppointmentSource = "website" | "manual";
+// "lock" rows reserve a slot (see Schedule); they're filtered out of booking lists.
+export type AppointmentSource = "website" | "manual" | "lock";
 export type InvoiceStatus = "Paid" | "Partial" | "Unpaid" | "Overdue";
 
 export interface ApiUser {
@@ -82,7 +83,9 @@ export interface ApiAppointment {
 
 export interface ApiSlotAvailability {
   date: string; // "YYYY-MM-DD"
-  slots: { time: string; booked: boolean }[];
+  // booked = a real (non-cancelled) patient booking holds the slot; locked = a
+  // staff lock holds it (lockId is its row id, for unlocking). Mutually exclusive.
+  slots: { time: string; booked: boolean; locked: boolean; lockId: string | null }[];
 }
 
 export interface ApiMedicine {
