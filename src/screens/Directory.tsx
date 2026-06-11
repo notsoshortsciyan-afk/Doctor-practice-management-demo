@@ -7,7 +7,7 @@ import {
   IconFilter,
   IconSearch,
 } from "../icons";
-import { usePatients, useSavePatient } from "../api/hooks";
+import { usePatients, usePrefetchPatient, useSavePatient } from "../api/hooks";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { TableRowsSkeleton } from "../components/Skeleton";
 import { PatientFormModal } from "../components/PatientFormModal";
@@ -136,10 +136,10 @@ function StatusChipMenu({ p }: { p: ApiPatient }) {
   );
 }
 
-function PatientRow({ p, onView, onEdit }: { p: ApiPatient; onView: () => void; onEdit: () => void }) {
+function PatientRow({ p, onView, onEdit, onHover }: { p: ApiPatient; onView: () => void; onEdit: () => void; onHover: () => void }) {
   const initials = p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
   return (
-    <div className="dt-row" style={{ gridTemplateColumns: "2.2fr 1fr 1.2fr 1.5fr 1fr 1.3fr" }} onClick={onView}>
+    <div className="dt-row" style={{ gridTemplateColumns: "2.2fr 1fr 1.2fr 1.5fr 1fr 1.3fr" }} onClick={onView} onMouseEnter={onHover}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div className="placeholder-stripe" style={{ width: 40, height: 40, display: "grid", placeItems: "center", color: "var(--navy-900)", fontFamily: "var(--font-h)", fontWeight: 700, fontSize: 13 }}>{initials}</div>
         <div>
@@ -232,6 +232,7 @@ export function Directory({ openPatient, initialQuery, isDoctor }: DirectoryProp
   );
 
   const { data, isLoading, isError } = usePatients(params);
+  const prefetchPatient = usePrefetchPatient();
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
@@ -276,7 +277,15 @@ export function Directory({ openPatient, initialQuery, isDoctor }: DirectoryProp
         ) : items.length === 0 ? (
           <EmptyState title="No patients match" sub="Try clearing filters or searching by a different term." />
         ) : (
-          items.map((p) => <PatientRow key={p.id} p={p} onView={() => openPatient(p.id)} onEdit={() => setEditing(p)} />)
+          items.map((p) => (
+            <PatientRow
+              key={p.id}
+              p={p}
+              onView={() => openPatient(p.id)}
+              onEdit={() => setEditing(p)}
+              onHover={() => prefetchPatient(p.id)}
+            />
+          ))
         )}
       </div>
 

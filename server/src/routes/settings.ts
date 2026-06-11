@@ -6,17 +6,16 @@ import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
 
-async function getOrCreate(userId: string) {
-  const existing = await prisma.userSettings.findUnique({ where: { userId } });
-  if (existing) return existing;
-  return prisma.userSettings.create({ data: { userId } });
-}
-
 router.get(
   "/",
   requireAuth,
   wrap(async (req, res) => {
-    const s = await getOrCreate(req.user!.sub);
+    // Upsert = one round trip whether or not the row exists yet.
+    const s = await prisma.userSettings.upsert({
+      where: { userId: req.user!.sub },
+      create: { userId: req.user!.sub },
+      update: {},
+    });
     res.json(s);
   })
 );
@@ -34,10 +33,10 @@ router.put(
   validate(updateSchema),
   wrap(async (req, res) => {
     const data = req.body as z.infer<typeof updateSchema>;
-    await getOrCreate(req.user!.sub);
-    const updated = await prisma.userSettings.update({
+    const updated = await prisma.userSettings.upsert({
       where: { userId: req.user!.sub },
-      data,
+      create: { userId: req.user!.sub, ...data },
+      update: data,
     });
     res.json(updated);
   })
@@ -46,19 +45,17 @@ router.put(
 // ── Clinic-wide settings (single row) ───────────────────────
 const CLINIC_ID = "singleton";
 
-async function getOrCreateClinic() {
-  const existing = await prisma.clinicSettings.findUnique({ where: { id: CLINIC_ID } });
-  if (existing) return existing;
-  return prisma.clinicSettings.create({ data: { id: CLINIC_ID } });
-}
-
 // GET /api/settings/clinic — readable by any signed-in staff (both roles use it
 // on the Schedule "full" threshold).
 router.get(
   "/clinic",
   requireAuth,
   wrap(async (_req, res) => {
-    const s = await getOrCreateClinic();
+    const s = await prisma.clinicSettings.upsert({
+      where: { id: CLINIC_ID },
+      create: { id: CLINIC_ID },
+      update: {},
+    });
     res.json({ slotFullAt: s.slotFullAt });
   })
 );
@@ -76,10 +73,10 @@ router.put(
   validate(clinicSchema),
   wrap(async (req, res) => {
     const data = req.body as z.infer<typeof clinicSchema>;
-    await getOrCreateClinic();
-    const updated = await prisma.clinicSettings.update({
+    const updated = await prisma.clinicSettings.upsert({
       where: { id: CLINIC_ID },
-      data: { slotFullAt: data.slotFullAt },
+      create: { id: CLINIC_ID, slotFullAt: data.slotFullAt },
+      update: { slotFullAt: data.slotFullAt },
     });
     res.json({ slotFullAt: updated.slotFullAt });
   })

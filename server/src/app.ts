@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
@@ -26,6 +27,10 @@ export function createApp() {
   }
 
   const app = express();
+
+  // Gzip JSON responses — the Records archive (/prescriptions?limit=2000) is the
+  // big one. No-op where the platform already compresses (skips encoded responses).
+  app.use(compression());
 
   // Same-origin on Vercel (frontend + /api share a host), so CORS is not load-bearing there.
   // Set CORS_ORIGIN (comma-separated allowlist) to lock the API down to specific origins.

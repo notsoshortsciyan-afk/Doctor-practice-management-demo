@@ -13,6 +13,7 @@ import {
   serializePrescription,
   prescriptionInclude,
 } from "../lib/serialize";
+import { createPatientWithCode } from "../lib/patientCode";
 
 const router = Router();
 router.use(requireAuth);
@@ -23,15 +24,6 @@ const STATUS_FROM_LABEL: Record<string, PatientStatus> = {
   Inactive: "Inactive",
   Pending: "Pending",
 };
-
-async function genPatientCode(): Promise<string> {
-  for (let i = 0; i < 10; i++) {
-    const code = `DC-${10000 + Math.floor(Math.random() * 89999)}`;
-    const clash = await prisma.patient.findUnique({ where: { code } });
-    if (!clash) return code;
-  }
-  return `DC-${Date.now().toString().slice(-5)}`;
-}
 
 // GET /api/patients?q=&status=&sort=&page=&pageSize=
 router.get(
@@ -61,6 +53,9 @@ router.get(
 
     const [rows, total] = await Promise.all([
       prisma.patient.findMany({
+        // One SQL statement for row + relations — the remote DB makes per-relation
+        // round trips the dominant cost (see relationJoins in schema.prisma).
+        relationLoadStrategy: "join",
         where,
         include: patientListInclude,
         orderBy,
@@ -84,7 +79,32 @@ router.get(
 router.get(
   "/:id",
   wrap(async (req, res) => {
+    // Clinical history is doctor-only; receptionists get the front-desk view —
+    // branch BEFORE the query so their request never fetches clinical relations.
+    const isDoctor = req.user!.role === "DOCTOR";
+
+    if (!isDoctor) {
+      const p = await prisma.patient.findUnique({
+        relationLoadStrategy: "join",
+        where: { id: req.params.id },
+        include: {
+          ...patientListInclude,
+          documents: { orderBy: { uploadedAt: "desc" } },
+        },
+      });
+      if (!p) throw new HttpError(404, "Patient not found");
+      res.json({
+        patient: serializePatient(p),
+        procedures: [],
+        notes: [],
+        prescriptions: [],
+        documents: p.documents,
+      });
+      return;
+    }
+
     const p = await prisma.patient.findUnique({
+      relationLoadStrategy: "join",
       where: { id: req.params.id },
       include: {
         ...patientListInclude,
@@ -96,13 +116,11 @@ router.get(
     });
     if (!p) throw new HttpError(404, "Patient not found");
 
-    // Clinical history is doctor-only; receptionists get the front-desk view.
-    const isDoctor = req.user!.role === "DOCTOR";
     res.json({
       patient: serializePatient(p),
-      procedures: isDoctor ? p.procedures.map(serializeProcedure) : [],
-      notes: isDoctor ? p.clinicalNotes.map(serializeNote) : [],
-      prescriptions: isDoctor ? p.prescriptions.map(serializePrescription) : [],
+      procedures: p.procedures.map(serializeProcedure),
+      notes: p.clinicalNotes.map(serializeNote),
+      prescriptions: p.prescriptions.map(serializePrescription),
       documents: p.documents,
     });
   })
@@ -154,10 +172,13 @@ router.post(
   validate(patientBody),
   wrap(async (req, res) => {
     const body = req.body as z.infer<typeof patientBody>;
-    const created = await prisma.patient.create({
-      data: { code: await genPatientCode(), ...toData(body) },
-      include: patientListInclude,
-    });
+    const created = await createPatientWithCode((code) =>
+      prisma.patient.create({
+        relationLoadStrategy: "join",
+        data: { code, ...toData(body) },
+        include: patientListInclude,
+      }),
+    );
     res.status(201).json(serializePatient(created));
   })
 );
@@ -172,6 +193,7 @@ router.put(
     // avatarHue should not be reshuffled on edit
     const { avatarHue: _omit, ...rest } = data;
     const updated = await prisma.patient.update({
+      relationLoadStrategy: "join",
       where: { id: req.params.id },
       data: rest,
       include: patientListInclude,

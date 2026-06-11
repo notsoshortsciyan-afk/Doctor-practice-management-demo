@@ -5,6 +5,9 @@ generator client {
   provider      = "prisma-client-js"
   // "native" for local dev; "rhel-openssl-3.0.x" matches the Vercel/AWS Lambda runtime.
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  // relationJoins: load include/select relations in ONE SQL statement (LATERAL joins)
+  // instead of one query per relation — the DB is remote (Neon), so round trips dominate.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -104,6 +107,8 @@ model Patient {
   documents     Document[]
 
   @@index([status])
+  // Default Directory sort ("recent" = createdAt desc).
+  @@index([createdAt])
 }
 
 // Shared with the public clinic website. The website INSERTs customer bookings here;
@@ -148,6 +153,9 @@ model Prescription {
 
   @@index([patientId])
   @@index([date])
+  // Serves the per-patient "latest prescription" lookup (patientListInclude's
+  // take:1 orderBy date desc) and the detail bundle's date-ordered list.
+  @@index([patientId, date])
 }
 
 model PrescriptionMedicine {

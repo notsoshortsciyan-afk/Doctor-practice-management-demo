@@ -73,7 +73,9 @@ function LockLegend({ swatch, border, label }: { swatch: string; border: string;
 
 function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string) => void }) {
   const availability = useSlotAvailability(date, {
-    refetchInterval: 5_000,
+    // Same cadence as the bookings list below — one aligned poll wave instead of
+    // two staggered request streams.
+    refetchInterval: 7_000,
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
@@ -92,11 +94,14 @@ function SlotLockGrid({ date, showToast }: { date: string; showToast: (m: string
     setBusyTime(s.time);
     const done = () => setBusyTime(null);
     if (s.locked && s.lockId) {
-      unlock.mutate(s.lockId, {
-        onSuccess: () => showToast("Slot unlocked — open for booking again."),
-        onError: (e) => showToast(e instanceof Error ? e.message : "Could not unlock the slot."),
-        onSettled: done,
-      });
+      unlock.mutate(
+        { lockId: s.lockId, date, time: s.time },
+        {
+          onSuccess: () => showToast("Slot unlocked — open for booking again."),
+          onError: (e) => showToast(e instanceof Error ? e.message : "Could not unlock the slot."),
+          onSettled: done,
+        },
+      );
     } else {
       lock.mutate(
         { date, time: s.time },

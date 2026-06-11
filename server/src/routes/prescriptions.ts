@@ -7,18 +7,10 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { HttpError } from "../middleware/error";
 import { prescriptionInclude, serializePrescription } from "../lib/serialize";
 import { nextInvoiceNumber } from "../lib/invoiceNumber";
+import { createPatientWithCode } from "../lib/patientCode";
 
 const router = Router();
 router.use(requireAuth);
-
-async function genPatientCode(): Promise<string> {
-  for (let i = 0; i < 10; i++) {
-    const code = `DC-${10000 + Math.floor(Math.random() * 89999)}`;
-    const clash = await prisma.patient.findUnique({ where: { code } });
-    if (!clash) return code;
-  }
-  return `DC-${Date.now().toString().slice(-5)}`;
-}
 
 // Reading prescriptions is clinical → doctor only.
 router.get(
@@ -44,6 +36,9 @@ router.get(
     }
 
     const rows = await prisma.prescription.findMany({
+      // One SQL statement for rows + relations (medicines/patient/provider) —
+      // the remote DB makes per-relation round trips the dominant cost.
+      relationLoadStrategy: "join",
       where,
       include: prescriptionInclude,
       orderBy: { date: "desc" },
@@ -58,6 +53,7 @@ router.get(
   requireRole("DOCTOR"),
   wrap(async (req, res) => {
     const p = await prisma.prescription.findUnique({
+      relationLoadStrategy: "join",
       where: { id: req.params.id },
       include: prescriptionInclude,
     });
@@ -121,27 +117,36 @@ router.post(
   wrap(async (req, res) => {
     const body = req.body as z.infer<typeof createSchema>;
 
-    let patientId = body.patientId;
-    if (!patientId && body.newPatient) {
-      const np = body.newPatient;
-      const created = await prisma.patient.create({
-        data: {
-          code: await genPatientCode(),
-          name: np.name,
-          phone: np.phone,
-          age: np.age,
-          gender: np.gender,
-          avatarHue: Math.floor(Math.random() * 360),
-        },
-      });
-      patientId = created.id;
-    }
+    // The optional walk-in patient create and the invoice-number lookup are
+    // independent reads/writes — run them concurrently instead of back-to-back.
+    const wantsInvoice = !!body.invoiceAmount && body.invoiceAmount > 0;
+    const np = body.newPatient;
+    const [createdPatient, invoiceNumber] = await Promise.all([
+      !body.patientId && np
+        ? createPatientWithCode((code) =>
+            prisma.patient.create({
+              data: {
+                code,
+                name: np.name,
+                phone: np.phone,
+                age: np.age,
+                gender: np.gender,
+                avatarHue: Math.floor(Math.random() * 360),
+              },
+            }),
+          )
+        : Promise.resolve(null),
+      wantsInvoice ? nextInvoiceNumber() : Promise.resolve(null),
+    ]);
+
+    const patientId = body.patientId ?? createdPatient?.id;
     if (!patientId) throw new HttpError(400, "No patient specified");
 
     const meds = (body.meds ?? []).filter((m) => m.name.trim());
 
     const operations = [
       prisma.prescription.create({
+        relationLoadStrategy: "join",
         data: {
           patientId,
           providerId: req.user!.sub,
@@ -174,14 +179,12 @@ router.post(
       );
     }
 
-    if (body.invoiceAmount && body.invoiceAmount > 0) {
-      const number = await nextInvoiceNumber();
-
+    if (invoiceNumber && body.invoiceAmount && body.invoiceAmount > 0) {
       operations.push(
         prisma.invoice.create({
           data: {
             patientId,
-            number,
+            number: invoiceNumber,
             total: body.invoiceAmount,
             lineItems: [
               {

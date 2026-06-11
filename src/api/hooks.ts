@@ -10,6 +10,7 @@ import type {
   ApiAppointment,
   ApiClinicSettings,
   ApiInvoice,
+  ApiPatient,
   ApiPatientBundle,
   ApiPrescription,
   ApiSettings,
@@ -61,6 +62,18 @@ export function prefetchRoute(qc: QueryClient, route: string, today: string) {
   }
 }
 
+// Warm a patient's detail bundle (e.g. on Directory row hover) so opening it
+// renders instantly from cache. prefetchQuery respects the global staleTime,
+// so repeated hovers over the same row are free.
+export function usePrefetchPatient() {
+  const qc = useQueryClient();
+  return (id: string) =>
+    qc.prefetchQuery({
+      queryKey: ["patient", id],
+      queryFn: () => apiFetch<ApiPatientBundle>(`/patients/${id}`),
+    });
+}
+
 // ---------- Patients ----------
 export interface PatientQuery {
   q?: string;
@@ -106,14 +119,28 @@ export function useSavePatient() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { id?: string; data: PatientInput }) =>
-      apiFetch(vars.id ? `/patients/${vars.id}` : "/patients", {
+      apiFetch<ApiPatient>(vars.id ? `/patients/${vars.id}` : "/patients", {
         method: vars.id ? "PUT" : "POST",
         body: vars.data,
       }),
-    onSuccess: (_d, vars) => {
+    onSuccess: (saved, vars) => {
+      // The server returns the saved patient — write it straight into every
+      // cached list page and the detail bundle so the UI reflects the edit
+      // immediately; the invalidation below re-sorts/re-pages in the background.
+      qc.setQueriesData<PatientListResponse>({ queryKey: ["patients"] }, (old) =>
+        old
+          ? { ...old, items: old.items.map((p) => (p.id === saved.id ? saved : p)) }
+          : old,
+      );
+      if (vars.id) {
+        qc.setQueryData<ApiPatientBundle>(["patient", vars.id], (old) =>
+          old ? { ...old, patient: saved } : old,
+        );
+        qc.invalidateQueries({ queryKey: ["patient", vars.id] });
+      }
       qc.invalidateQueries({ queryKey: ["patients"] });
-      if (vars.id) qc.invalidateQueries({ queryKey: ["patient", vars.id] });
-      qc.invalidateQueries({ queryKey: ["stats"] });
+      // Only a NEW patient changes the stats (total/period counts).
+      if (!vars.id) qc.invalidateQueries({ queryKey: ["stats"] });
     },
   });
 }
@@ -183,6 +210,20 @@ export function useCreateAppointment() {
   });
 }
 
+// Appointments live under several cache keys (Dashboard uses {date}, Schedule
+// {date,status}); patch them all optimistically so a status click paints at
+// click time, then reconcile with a background refetch in onSettled.
+function snapshotAppointments(qc: QueryClient) {
+  return qc.getQueriesData<ApiAppointment[]>({ queryKey: ["appointments"] });
+}
+
+function restoreAppointments(
+  qc: QueryClient,
+  prev: ReturnType<typeof snapshotAppointments> | undefined,
+) {
+  prev?.forEach(([key, data]) => qc.setQueryData(key, data));
+}
+
 export function useUpdateAppointment() {
   const qc = useQueryClient();
   return useMutation({
@@ -190,15 +231,32 @@ export function useUpdateAppointment() {
       id: string;
       data: { status?: string; appointmentDate?: string; appointmentTime?: string };
     }) => apiFetch<ApiAppointment>(`/appointments/${vars.id}`, { method: "PATCH", body: vars.data }),
-    onSuccess: () => {
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ["appointments"] });
+      const prev = snapshotAppointments(qc);
+      qc.setQueriesData<ApiAppointment[]>({ queryKey: ["appointments"] }, (old) =>
+        old?.map((a) => (a.id === vars.id ? ({ ...a, ...vars.data } as ApiAppointment) : a)),
+      );
+      return { prev };
+    },
+    // Roll the optimistic flip back, then refetch — a 409 on reschedule means the
+    // target slot was just taken, so the grid should reflect reality immediately.
+    onError: (_e, _v, ctx) => {
+      restoreAppointments(qc, ctx?.prev);
+      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
+    },
+    onSuccess: (appt) => {
+      // Server response is authoritative — overwrite the optimistic row.
+      qc.setQueriesData<ApiAppointment[]>({ queryKey: ["appointments"] }, (old) =>
+        old?.map((a) => (a.id === appt.id ? appt : a)),
+      );
+    },
+    // Background reconciliation: catches status-filtered lists (a cancelled row
+    // must drop out of a "Confirmed" filter) and derived surfaces.
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
-    },
-    // Same as create: a 409 on reschedule means the target slot was just taken — refetch now.
-    onError: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
-      qc.invalidateQueries({ queryKey: ["appointment-availability"] });
     },
   });
 }
@@ -207,7 +265,16 @@ export function useDeleteAppointment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/appointments/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["appointments"] });
+      const prev = snapshotAppointments(qc);
+      qc.setQueriesData<ApiAppointment[]>({ queryKey: ["appointments"] }, (old) =>
+        old?.filter((a) => a.id !== id),
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => restoreAppointments(qc, ctx?.prev),
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["appointment-availability"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
@@ -222,15 +289,45 @@ function invalidateSlots(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ["stats"] });
 }
 
+// Patch one slot in a day's cached availability grid.
+function setSlot(
+  qc: QueryClient,
+  date: string,
+  time: string,
+  patch: Partial<ApiSlotAvailability["slots"][number]>,
+) {
+  qc.setQueryData<ApiSlotAvailability>(["appointment-availability", date], (old) =>
+    old
+      ? { ...old, slots: old.slots.map((s) => (s.time === time ? { ...s, ...patch } : s)) }
+      : old,
+  );
+}
+
 // Lock a free slot so it can't be booked on the website or front desk.
+// Optimistic: the tile flips at click time; rolled back on error.
 export function useLockSlot() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { date: string; time: string }) =>
-      apiFetch("/appointments/locks", { method: "POST", body: vars }),
-    onSuccess: () => invalidateSlots(qc),
-    // On a 409 (slot taken/locked a beat earlier), refetch so the grid reflects reality.
-    onError: () => invalidateSlots(qc),
+      apiFetch<{ ok: boolean; id: string; time: string }>("/appointments/locks", {
+        method: "POST",
+        body: vars,
+      }),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ["appointment-availability", vars.date] });
+      const prev = qc.getQueryData<ApiSlotAvailability>(["appointment-availability", vars.date]);
+      // lockId stays null until the server replies; Schedule's busyTime guard
+      // blocks a second click on the same slot in that window.
+      setSlot(qc, vars.date, vars.time, { locked: true, lockId: null });
+      return { prev };
+    },
+    // The unlock button needs the real lock row id — write it from the response.
+    onSuccess: (res, vars) => setSlot(qc, vars.date, vars.time, { lockId: res.id }),
+    // On a 409 (slot locked a beat earlier), restore + refetch so the grid reflects reality.
+    onError: (_e, vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["appointment-availability", vars.date], ctx.prev);
+    },
+    onSettled: () => invalidateSlots(qc),
   });
 }
 
@@ -238,8 +335,18 @@ export function useLockSlot() {
 export function useUnlockSlot() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (lockId: string) => apiFetch(`/appointments/locks/${lockId}`, { method: "DELETE" }),
-    onSuccess: () => invalidateSlots(qc),
+    mutationFn: (vars: { lockId: string; date: string; time: string }) =>
+      apiFetch(`/appointments/locks/${vars.lockId}`, { method: "DELETE" }),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ["appointment-availability", vars.date] });
+      const prev = qc.getQueryData<ApiSlotAvailability>(["appointment-availability", vars.date]);
+      setSlot(qc, vars.date, vars.time, { locked: false, lockId: null });
+      return { prev };
+    },
+    onError: (_e, vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["appointment-availability", vars.date], ctx.prev);
+    },
+    onSettled: () => invalidateSlots(qc),
   });
 }
 
@@ -347,7 +454,12 @@ export function useRecordPayment() {
         method: "POST",
         body: { amount: vars.amount, method: vars.method },
       }),
-    onSuccess: () => {
+    onSuccess: (inv) => {
+      // The server returns the updated invoice — write it into every cached list
+      // so the row (status/paid/due) updates without a full-list refetch flash.
+      qc.setQueriesData<ApiInvoice[]>({ queryKey: ["invoices"] }, (old) =>
+        old?.map((i) => (i.id === inv.id ? inv : i)),
+      );
       qc.invalidateQueries({ queryKey: ["invoices"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
       qc.invalidateQueries({ queryKey: ["patients"] });

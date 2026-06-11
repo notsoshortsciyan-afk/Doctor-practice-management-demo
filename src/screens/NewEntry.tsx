@@ -17,6 +17,7 @@ import { Modal } from "../components/Modal";
 import { Dropdown, type DropdownOption } from "../components/Dropdown";
 import { RxSizeControl } from "../components/RxSizeControl";
 import { useRxScale } from "../lib/rxScale";
+import { useDebouncedValue } from "../lib/useDebouncedValue";
 import type {
   EntryForm,
   Medicine,
@@ -178,9 +179,12 @@ export function NewEntry({ go, showToast }: NewEntryProps) {
   const createRx = useCreatePrescription();
   const updatePatient = useUpdatePatient();
 
-  // Phone-based auto-match logic
+  // Phone-based auto-match logic. Debounced so typing fires one lookup per
+  // pause instead of one per keystroke; the match effect below still reads the
+  // CURRENT form.phone so the release logic stays exact.
+  const debouncedPhone = useDebouncedValue(form.phone, 250);
   const { data: patientsList } = usePatients({
-    q: form.phone.trim().length >= 10 ? form.phone : "",
+    q: debouncedPhone.trim().length >= 10 ? debouncedPhone : "",
     pageSize: 10,
   });
 
